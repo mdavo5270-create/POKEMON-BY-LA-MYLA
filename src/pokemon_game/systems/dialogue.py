@@ -72,6 +72,14 @@ class Dialogue:
             self._font = pygame.font.SysFont(None, 24)
             self._font_name = pygame.font.SysFont(None, 22)
 
+    def load_pages(self, pages: list[dict], index: int = 0) -> None:
+        """Charge des pages déjà générées (IA locale / mémoire)."""
+        self.pages = list(pages) if pages else [{"name": None, "text": "…"}]
+        self.page_index = max(0, min(index, len(self.pages) - 1))
+        self.active = True
+        if self.player:
+            setattr(self.player, "_dialogue_lock", True)
+
     def load_data(self, dialogue_id: int, index: int = 0) -> None:
         """Charge un fichier CSV de dialogue et active l'affichage."""
         path = Path(asset_path("dialogues", f"{dialogue_id}.csv"))

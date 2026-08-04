@@ -13,8 +13,8 @@ from pathlib import Path
 
 class Option:
     LABELS = {
-        "fr": ["Continuer", "Sauvegarder", "Quitter"],
-        "en": ["Resume", "Save", "Quit"],
+        "fr": ["Continuer", "Sauvegarder", "Règles de société", "Quitter"],
+        "en": ["Resume", "Save", "Society rules", "Quit"],
     }
 
     def __init__(self, screen, controller, map_obj, lang, save, keylistener, dialogue) -> None:
@@ -46,7 +46,7 @@ class Option:
             self._font_title = pygame.font.SysFont(None, 40)
 
         # Panel semi-transparent
-        self._panel = pygame.Surface((360, 280), pygame.SRCALPHA)
+        self._panel = pygame.Surface((360, 320), pygame.SRCALPHA)
         self._panel.fill((15, 20, 40, 230))
         pygame.draw.rect(self._panel, (255, 255, 255), self._panel.get_rect(), 3)
 
@@ -69,11 +69,12 @@ class Option:
         kl = self.keylistener
         c = self.controller
 
+        n = len(self.LABELS[self.lang])
         if kl.key_pressed(c.get_key("up")):
-            self.selected = (self.selected - 1) % 3
+            self.selected = (self.selected - 1) % n
             kl.remove_key(c.get_key("up"))
         elif kl.key_pressed(c.get_key("down")):
-            self.selected = (self.selected + 1) % 3
+            self.selected = (self.selected + 1) % n
             kl.remove_key(c.get_key("down"))
         elif kl.key_pressed(c.get_key("action")):
             self._activate()
@@ -83,14 +84,21 @@ class Option:
             kl.remove_key(c.get_key("menu"))
 
     def _activate(self) -> None:
-        if self.selected == 0:  # Continuer
+        labels = self.LABELS[self.lang]
+        choice = labels[self.selected]
+        if choice in ("Continuer", "Resume"):
             self.close()
-        elif self.selected == 1:  # Sauvegarder
+        elif choice in ("Sauvegarder", "Save"):
             if self.save:
                 self.save.save()
-            # on laisse le menu ouvert ; le dialogue de feedback s'affichera au close
             self.close()
-        elif self.selected == 2:  # Quitter
+        elif choice in ("Règles de société", "Society rules"):
+            from pokemon_game.systems.society import SOCIETY_RULES
+            pages = [{"name": "Société", "text": r} for r in SOCIETY_RULES]
+            if hasattr(self.dialogue, "load_pages"):
+                self.dialogue.load_pages(pages)
+            self.close()
+        elif choice in ("Quitter", "Quit"):
             pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     def _draw(self) -> None:

@@ -32,7 +32,8 @@ class Map:
         self.collisions: list[pygame.Rect] = []
         self.stairs: dict = {}
         self.dialogues: list = []
-        self.npcs: list = []
+        self.npcs: list = []          # données Tiled (dicts)
+        self.npc_entities: list = []  # sprites PNJ vivants
         self.triggers: list = []
         self.spawns: dict = {}
 
@@ -93,6 +94,12 @@ class Map:
         self.triggers = parsed.triggers
         self.spawns = parsed.spawns
 
+        # Nettoyer anciens PNJ entities au changement de map
+        for ent in getattr(self, "npc_entities", []) or []:
+            if self.group and ent in self.group:
+                self.group.remove(ent)
+        self.npc_entities = []
+
         if self.player:
             self.pose_player(switch)
             self.player.align_hitbox()
@@ -111,6 +118,19 @@ class Map:
         self.player = player
         if self.group:
             self.group.add(player)
+
+    def add_npc(self, npc) -> None:
+        """Ajoute une entité NPC (sprite) à la map courante."""
+        if not hasattr(self, "npc_entities"):
+            self.npc_entities = []
+        self.npc_entities.append(npc)
+        if self.group:
+            self.group.add(npc)
+        if hasattr(npc, "hitbox"):
+            self.collisions.append(npc.hitbox)
+            if self.player:
+                self.player.add_collisions(self.collisions)
+        print(f"[NPC] {getattr(npc, 'name', 'NPC')} @ ({npc.position.x:.0f}, {npc.position.y:.0f})")
 
     def update(self) -> None:
         if self.group and self.player:
