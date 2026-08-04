@@ -6,6 +6,8 @@ Convention (see docs/TILED_WORKFLOW.md):
 - spawn      → name="spawn <from_map> <port>"  type="spawn"
 - dialogue   → name="dialogue <id>"  type="dialogue"
 - npc        → name="npc <id>"  type="npc"
+
+Compatible aussi avec les anciens nommages des EP (Arnaud Michel).
 """
 from __future__ import annotations
 
@@ -36,40 +38,80 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
 
     for obj in tmx_data.objects:
         name = (obj.name or "").strip()
-        obj_type = (getattr(obj, "type", None) or "").strip().lower()
+        obj_type = (getattr(obj, "type", None) or getattr(obj, "class", None) or "").strip().lower()
+        props = dict(obj.properties) if hasattr(obj, "properties") else {}
 
         # Fallback: deduce type from name prefix
         if not obj_type and name:
-            obj_type = name.split(" ")[0].lower()
+            first = name.split(" ")[0].lower()
+            obj_type = first
 
-        rect = pygame.Rect(obj.x, obj.y, obj.width or 16, obj.height or 16)
-        props = dict(obj.properties) if hasattr(obj, "properties") else {}
+        rect = pygame.Rect(int(obj.x), int(obj.y), int(obj.width or 16), int(obj.height or 16))
 
-        if obj_type == "collision" or name == "collision":
+        # --- Collisions ---
+        if obj_type == "collision" or name.lower() == "collision" or name.lower().startswith("collision"):
             result.collisions.append(rect)
+            continue
 
-        elif obj_type == "switch" or name.startswith("switch "):
+        # --- Switches / Warps (très tolérant) ---
+        is_switch = (
+            obj_type in ("switch", "warp", "door", "teleport", "passage")
+            or name.lower().startswith("switch")
+            or name.lower().startswith("warp")
+            or name.lower().startswith("door")
+            or "map_" in name.lower()
+            or "house_" in name.lower()
+            or "labo" in name.lower()
+            or "pokecenter" in name.lower()
+            or "pokeshop" in name.lower()
+            or "inter_" in name.lower()
+        )
+
+        if is_switch:
             parts = name.split()
-            # Expected: switch <map_name> <port>
-            if len(parts) >= 3:
-                map_name = parts[1]
+            map_name = props.get("map_target") or props.get("map") or props.get("target")
+            port = props.get("port", props.get("spawn", 0))
+
+            if map_name is None:
+                # Formats : "switch house_0 0" / "house_0 0" / "switch map_1" / juste "house_0"
+                if len(parts) >= 3 and parts[0].lower() in ("switch", "warp", "door"):
+                    map_name = parts[1]
+                    try:
+                        port = int(parts[2])
+                    except ValueError:
+                        port = 0
+                elif len(parts) >= 2:
+                    # "house_0 0" ou "switch house_0"
+                    if parts[0].lower() in ("switch", "warp", "door"):
+                        map_name = parts[1]
+                        port = 0
+                    else:
+                        map_name = parts[0]
+                        try:
+                            port = int(parts[1])
+                        except ValueError:
+                            port = 0
+                elif len(parts) == 1 and parts[0]:
+                    map_name = parts[0]
+                    port = 0
+
+            if map_name:
+                # Nettoie le nom (enlève préfixe switch/warp si encore présent)
+                map_name = str(map_name).replace("switch", "").replace("warp", "").strip()
                 try:
-                    port = int(parts[-1])
-                except ValueError:
+                    port = int(port)
+                except (ValueError, TypeError):
                     port = 0
                 result.switches.append(Switch("switch", map_name, rect, port))
-            else:
-                # Use properties if available
-                map_name = props.get("map_target", parts[1] if len(parts) > 1 else "map_0")
-                port = int(props.get("port", 0))
-                result.switches.append(Switch("switch", map_name, rect, port))
+            continue
 
-        elif obj_type == "spawn" or name.startswith("spawn "):
-            parts = name.split()
-            key = name  # keep full name as key
-            result.spawns[key] = pygame.math.Vector2(obj.x, obj.y)
+        # --- Spawns ---
+        if obj_type == "spawn" or name.lower().startswith("spawn"):
+            result.spawns[name] = pygame.math.Vector2(obj.x, obj.y)
+            continue
 
-        elif obj_type == "dialogue" or name.startswith("dialogue "):
+        # --- Dialogues ---
+        if obj_type == "dialogue" or name.lower().startswith("dialogue"):
             dialogue_id = props.get("dialogue_id")
             if dialogue_id is None and len(name.split()) > 1:
                 try:
@@ -81,24 +123,35 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
                 "rect": rect,
                 "properties": props,
             })
+            continue
 
-        elif obj_type == "npc" or name.startswith("npc "):
+        # --- NPCs ---
+        if obj_type == "npc" or name.lower().startswith("npc"):
             result.npcs.append({
                 "name": name,
                 "rect": rect,
                 "properties": props,
             })
+            continue
 
-        elif obj_type in ("trigger", "item", "warp"):
+        # --- Triggers / items ---
+        if obj_type in ("trigger", "item", "event"):
             result.triggers.append({
                 "type": obj_type,
                 "name": name,
                 "rect": rect,
                 "properties": props,
             })
+            continue
 
-        elif obj_type == "stairs" or name.startswith("stairs "):
+        # --- Stairs ---
+        if obj_type == "stairs" or name.lower().startswith("stairs"):
             key = name.split()[-1] if " " in name else name
             result.stairs[key] = rect
+
+    print(f"[MAP_OBJECTS] collisions={len(result.collisions)}  switches={len(result.switches)}  "
+          f"spawns={len(result.spawns)}  dialogues={len(result.dialogues)}")
+    for s in result.switches:
+        print(f"             switch → {s.name} port={s.port}")
 
     return result
