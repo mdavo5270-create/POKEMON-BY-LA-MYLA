@@ -38,7 +38,9 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
 
     for obj in tmx_data.objects:
         name = (obj.name or "").strip()
-        obj_type = (getattr(obj, "type", None) or getattr(obj, "class", None) or "").strip().lower()
+        obj_type = (
+            getattr(obj, "type", None) or getattr(obj, "class", None) or ""
+        ).strip().lower()
         props = dict(obj.properties) if hasattr(obj, "properties") else {}
 
         # Fallback: deduce type from name prefix
@@ -46,25 +48,37 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
             first = name.split(" ")[0].lower()
             obj_type = first
 
-        rect = pygame.Rect(int(obj.x), int(obj.y), int(obj.width or 16), int(obj.height or 16))
+        rect = pygame.Rect(
+            int(obj.x), int(obj.y), int(obj.width or 16), int(obj.height or 16)
+        )
+        name_low = name.lower()
 
         # --- Collisions ---
-        if obj_type == "collision" or name.lower() == "collision" or name.lower().startswith("collision"):
+        if (
+            obj_type == "collision"
+            or name_low == "collision"
+            or name_low.startswith("collision")
+        ):
             result.collisions.append(rect)
             continue
 
-        # --- Switches / Warps (très tolérant) ---
+        # --- Spawns (AVANT les switches : "spawn house_0 0" contient "house_") ---
+        if obj_type == "spawn" or name_low.startswith("spawn"):
+            result.spawns[name] = pygame.math.Vector2(obj.x, obj.y)
+            continue
+
+        # --- Switches / Warps ---
         is_switch = (
             obj_type in ("switch", "warp", "door", "teleport", "passage")
-            or name.lower().startswith("switch")
-            or name.lower().startswith("warp")
-            or name.lower().startswith("door")
-            or "map_" in name.lower()
-            or "house_" in name.lower()
-            or "labo" in name.lower()
-            or "pokecenter" in name.lower()
-            or "pokeshop" in name.lower()
-            or "inter_" in name.lower()
+            or name_low.startswith("switch")
+            or name_low.startswith("warp")
+            or name_low.startswith("door")
+            or "map_" in name_low
+            or "house_" in name_low
+            or "labo" in name_low
+            or "pokecenter" in name_low
+            or "pokeshop" in name_low
+            or "inter_" in name_low
         )
 
         if is_switch:
@@ -73,7 +87,6 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
             port = props.get("port", props.get("spawn", 0))
 
             if map_name is None:
-                # Formats : "switch house_0 0" / "house_0 0" / "switch map_1" / juste "house_0"
                 if len(parts) >= 3 and parts[0].lower() in ("switch", "warp", "door"):
                     map_name = parts[1]
                     try:
@@ -81,7 +94,6 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
                     except ValueError:
                         port = 0
                 elif len(parts) >= 2:
-                    # "house_0 0" ou "switch house_0"
                     if parts[0].lower() in ("switch", "warp", "door"):
                         map_name = parts[1]
                         port = 0
@@ -96,8 +108,12 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
                     port = 0
 
             if map_name:
-                # Nettoie le nom (enlève préfixe switch/warp si encore présent)
-                map_name = str(map_name).replace("switch", "").replace("warp", "").strip()
+                map_name = (
+                    str(map_name).replace("switch", "").replace("warp", "").strip()
+                )
+                # Ne jamais enregistrer un switch nommé "spawn"
+                if map_name.lower() == "spawn":
+                    continue
                 try:
                     port = int(port)
                 except (ValueError, TypeError):
@@ -105,52 +121,48 @@ def parse_objects(tmx_data: pytmx.TiledMap) -> MapObjects:
                 result.switches.append(Switch("switch", map_name, rect, port))
             continue
 
-        # --- Spawns ---
-        if obj_type == "spawn" or name.lower().startswith("spawn"):
-            result.spawns[name] = pygame.math.Vector2(obj.x, obj.y)
-            continue
-
         # --- Dialogues ---
-        if obj_type == "dialogue" or name.lower().startswith("dialogue"):
+        if obj_type == "dialogue" or name_low.startswith("dialogue"):
             dialogue_id = props.get("dialogue_id")
             if dialogue_id is None and len(name.split()) > 1:
                 try:
                     dialogue_id = int(name.split()[1])
                 except ValueError:
                     dialogue_id = 0
-            result.dialogues.append({
-                "id": dialogue_id,
-                "rect": rect,
-                "properties": props,
-            })
+            result.dialogues.append(
+                {"id": dialogue_id, "rect": rect, "properties": props}
+            )
             continue
 
         # --- NPCs ---
-        if obj_type == "npc" or name.lower().startswith("npc"):
-            result.npcs.append({
-                "name": name,
-                "rect": rect,
-                "properties": props,
-            })
+        if obj_type == "npc" or name_low.startswith("npc"):
+            result.npcs.append(
+                {"name": name, "rect": rect, "properties": props}
+            )
             continue
 
         # --- Triggers / items ---
         if obj_type in ("trigger", "item", "event"):
-            result.triggers.append({
-                "type": obj_type,
-                "name": name,
-                "rect": rect,
-                "properties": props,
-            })
+            result.triggers.append(
+                {
+                    "type": obj_type,
+                    "name": name,
+                    "rect": rect,
+                    "properties": props,
+                }
+            )
             continue
 
         # --- Stairs ---
-        if obj_type == "stairs" or name.lower().startswith("stairs"):
+        if obj_type == "stairs" or name_low.startswith("stairs"):
             key = name.split()[-1] if " " in name else name
             result.stairs[key] = rect
 
-    print(f"[MAP_OBJECTS] collisions={len(result.collisions)}  switches={len(result.switches)}  "
-          f"spawns={len(result.spawns)}  dialogues={len(result.dialogues)}")
+    print(
+        f"[MAP_OBJECTS] collisions={len(result.collisions)}  "
+        f"switches={len(result.switches)}  "
+        f"spawns={len(result.spawns)}  dialogues={len(result.dialogues)}"
+    )
     for s in result.switches:
         print(f"             switch → {s.name} port={s.port}")
 
