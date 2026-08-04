@@ -19,7 +19,8 @@ import pygame
 
 from pokemon_game.core.tool import asset_path
 
-_NAME_RE = re.compile(r":\[name=([^;\]]+)[^"]*\]:")
+# Match :[name=XXX;...] :  — group(1) = speaker name
+_NAME_RE = re.compile(r":\[name=([^;\]]+)(?:;[^\]]*)?\]:")
 _WAIT_RE = re.compile(r"\[WAIT\s+\d+\]")
 
 
