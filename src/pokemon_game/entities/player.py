@@ -123,8 +123,9 @@ class Player(Entity):
         self.collisions = collisions or []
 
     def add_switchs(self, switchs: list) -> None:
-        self.switchs = switchs or []
-        print(f"[SWITCH] {len(self.switchs)} switch(es) chargés pour le joueur")
+        # Ignore les faux switches nommés "spawn" (ce sont des points d'apparition, pas des téléports)
+        self.switchs = [s for s in (switchs or []) if s.name.lower() != "spawn"]
+        print(f"[SWITCH] {len(self.switchs)} switch(es) chargés pour le joueur (spawn exclus)")
         for s in self.switchs:
             print(f"         → {s.name} port={s.port} rect={s.hitbox}")
 
@@ -180,9 +181,12 @@ class Player(Entity):
 
         test = self.hitbox.move(dx, dy)
 
-        # 1) SWITCHES EN PRIORITÉ (même si collision mur)
+        # 1) SWITCHES : déclenche uniquement si on ENTRE dans le switch
+        #    (collision sur la position future, pas sur la position actuelle).
+        #    Ça évite le blocage total quand le spawn est pile sur un switch,
+        #    et permet de sortir d'une zone de téléportation.
         for switch in self.switchs:
-            if switch.check_collision(test) or switch.check_collision(self.hitbox):
+            if switch.check_collision(test) and not switch.check_collision(self.hitbox):
                 self.pending_switch = switch
                 return
 
