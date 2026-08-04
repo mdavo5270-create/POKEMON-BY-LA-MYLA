@@ -54,6 +54,14 @@ class LivingBrain:
             pages = self._joelle(team_names, lang)
         elif self.personality == "commercial_honnête":
             pages = self._marchand(lang)
+        elif self.personality == "aventurier":
+            pages = self._hugo(lang)
+        elif self.personality == "curieuse":
+            pages = self._lea(team_names, lang)
+        elif self.personality == "calme":
+            pages = self._tom(lang)
+        elif self.personality == "strict":
+            pages = self._garde(lang)
         else:
             pages = [
                 {
@@ -198,3 +206,45 @@ class LivingBrain:
             {"name": n, "text": "Poké Balls, potions… tout a un prix. Pas de vol ici."},
             {"name": n, "text": "Reviens quand tu auras des sous."},
         ]
+
+    def _hugo(self, lang: str) -> list[dict]:
+        n = self.name
+        if lang != "fr":
+            return [{"name": n, "text": "The road is calling me!"}]
+        return [
+            {"name": n, "text": f"Salut ! Visite {self.memory.visits}. Moi c'est Hugo."},
+            {"name": n, "text": "Je prépare mon prochain campement. La Route de l'Est m'attend."},
+            {"name": n, "text": "Si tu vois des Pokémon rares, reviens me le dire !"},
+        ]
+
+    def _lea(self, team: list[str], lang: str) -> list[dict]:
+        n = self.name
+        if lang != "fr":
+            return [{"name": n, "text": "Your Pokémon look cool!"}]
+        t = ", ".join(team) if team else "personne"
+        return [
+            {"name": n, "text": "Oh ! Un dresseur !"},
+            {"name": n, "text": f"Ton équipe ({t})… j'aimerais trop voyager un jour."},
+            {"name": n, "text": "Tu as déjà parlé à Aria ? Elle fait un peu peur, mais elle est juste."},
+        ]
+
+    def _tom(self, lang: str) -> list[dict]:
+        n = self.name
+        if lang != "fr":
+            return [{"name": n, "text": "Fishing is patience."}]
+        return [
+            {"name": n, "text": "…"},
+            {"name": n, "text": "L'étang est calme aujourd'hui. Comme toujours."},
+            {"name": n, "text": "Pêcher, c'est attendre. Comme devenir un bon dresseur."},
+        ]
+
+    def _garde(self, lang: str) -> list[dict]:
+        n = self.name
+        if lang != "fr":
+            return [{"name": n, "text": "Stay safe on the East Route."}]
+        return [
+            {"name": n, "text": "Halte. Garde Milo, Route de l'Est."},
+            {"name": n, "text": "La route est libre, mais les Pokémon sauvages ne font pas de cadeau."},
+            {"name": n, "text": "Soigne ton équipe au Centre avant d'aller plus loin."},
+        ]
+

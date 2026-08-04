@@ -16,7 +16,7 @@ from pokemon_game.entities.pokemon import Pokemon
 from pokemon_game.systems.dialogue import Dialogue
 from pokemon_game.systems.option import Option
 from pokemon_game.systems.save import Save
-from pokemon_game.systems.society import CITIZENS, SOCIETY_RULES
+from pokemon_game.systems.society import CITIZENS, SOCIETY_RULES, PLACES, BUILDINGS
 
 
 class Game:
@@ -34,6 +34,8 @@ class Game:
             (pygame.Rect(400, 240, 48, 40), "pokecenter", 0),
             # Boutique
             (pygame.Rect(352, 240, 48, 40), "pokeshop", 0),
+            # Maison village (Hugo)
+            (pygame.Rect(624, 288, 48, 40), "inter_0", 0),
         ],
         "house_0": [(pygame.Rect(400, 400, 64, 40), "map_0", 0)],
         "house_1": [(pygame.Rect(88, 200, 64, 40), "map_0", 0)],
@@ -125,22 +127,29 @@ class Game:
             return
         map_name = getattr(self.map, "map_name", None) or "map_0"
 
+        # Positions outdoor (map_0) + intérieur = propriétaire chez lui
         layouts: dict[str, list[dict]] = {
             "map_0": [
-                {
-                    "key": "aria",
-                    "x": self.player.position.x + 80,
-                    "y": self.player.position.y + 16,
-                    "dir": "left",
-                },
-                {"key": "rival", "x": 580, "y": 280, "dir": "down"},
-                {"key": "chen", "x": 500, "y": 280, "dir": "down"},
+                {"key": "aria", "x": 520, "y": 300, "dir": "down"},
+                {"key": "rival", "x": 600, "y": 300, "dir": "left"},
+                {"key": "chen", "x": 480, "y": 300, "dir": "down"},
+                {"key": "joelle", "x": 430, "y": 300, "dir": "down"},
+                {"key": "marchand", "x": 380, "y": 300, "dir": "right"},
+                {"key": "hugo", "x": 650, "y": 320, "dir": "down"},
+                {"key": "lea", "x": 550, "y": 340, "dir": "left"},
+                {"key": "tom", "x": 200, "y": 400, "dir": "down"},
+                {"key": "garde", "x": 720, "y": 160, "dir": "down"},
             ],
             "house_0": [{"key": "aria", "x": 200, "y": 200, "dir": "down"}],
-            "house_1": [{"key": "rival", "x": 120, "y": 100, "dir": "down"}],
+            "house_1": [
+                {"key": "rival", "x": 120, "y": 100, "dir": "down"},
+                {"key": "lea", "x": 160, "y": 120, "dir": "left"},
+            ],
             "labo_0": [{"key": "chen", "x": 130, "y": 80, "dir": "down"}],
             "pokecenter": [{"key": "joelle", "x": 120, "y": 100, "dir": "down"}],
             "pokeshop": [{"key": "marchand", "x": 80, "y": 70, "dir": "down"}],
+            "inter_0": [{"key": "hugo", "x": 80, "y": 80, "dir": "down"}],
+            "map_1": [{"key": "garde", "x": 40, "y": 100, "dir": "down"}],
         }
 
         for spec in layouts.get(map_name, []):
@@ -158,16 +167,20 @@ class Game:
                 role=cit.role,
                 building=cit.building,
                 use_ai=True,
+                can_walk=True,
             )
-            # PNJ respectent les murs de la map
+            if hasattr(npc, "set_work") and (cit.work_x or cit.work_y):
+                npc.set_work(cit.work_x, cit.work_y)
             if hasattr(npc, "set_collisions"):
                 npc.set_collisions(list(getattr(self.map, "collisions", []) or []))
             self.map.add_npc(npc)
 
         if map_name == "map_0":
-            print("[SOCIÉTÉ] Village peuplé — chaque bâtiment a un propriétaire.")
-            for r in SOCIETY_RULES[:3]:
-                print(f"         {r}")
+            n = len(getattr(self.map, "npc_entities", []) or [])
+            print(f"[SOCIÉTÉ] {n} habitants actifs sur map_0.")
+            print("[SOCIÉTÉ] Bâtiments:", ", ".join(
+                f"{b.label} ({b.owner})" for b in BUILDINGS.values() if b.role != "route"
+            ))
 
     def _check_virtual_warps(self) -> None:
         """Warp uniquement à l'ENTRÉE dans la zone (comme les switches Tiled)."""
@@ -353,6 +366,19 @@ class Game:
                 self.dialogue.page_index = 0
                 self.dialogue.active = True
                 setattr(self.player, "_dialogue_lock", True)
+                return
+
+
+        # 3) Lieux d'intérêt (panneaux, étang, banc…)
+        for place in PLACES:
+            prect = pygame.Rect(place.x, place.y, place.w, place.h)
+            if front.colliderect(prect) or hit.colliderect(prect):
+                pages = [
+                    {"name": place.label, "text": place.description_fr},
+                ]
+                b = BUILDINGS.get(place.id)
+                self.dialogue.load_pages(pages)
+                print(f"[INTERACT] Lieu → {place.label}")
                 return
 
         print("[INTERACT] Rien à proximité")

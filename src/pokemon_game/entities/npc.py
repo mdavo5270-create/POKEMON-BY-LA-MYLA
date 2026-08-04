@@ -41,7 +41,8 @@ class NPC(Entity):
         self.properties: dict = {"dialogue_id": dialogue_id}
 
         self.home = pygame.math.Vector2(x, y)
-        self.speed = 0.6
+        self.work = pygame.math.Vector2(x, y)
+        self.speed = 0.55
         self.brain = LivingBrain(name, personality, role) if use_ai else None
 
         # IA de déplacement
@@ -128,16 +129,34 @@ class NPC(Entity):
         self.align_hitbox()
         self._animate(dt)
 
+    def set_work(self, x: float, y: float) -> None:
+        self.work = pygame.math.Vector2(x, y)
+
+    def _go_toward(self, target: pygame.math.Vector2, collisions: list) -> bool:
+        """Marche vers target. Retourne True si arrivé."""
+        dx = target.x - self.position.x
+        dy = target.y - self.position.y
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist < 6:
+            return True
+        step_x = (dx / dist) * self.speed
+        step_y = (dy / dist) * self.speed
+        if abs(step_x) > abs(step_y):
+            self._set_direction("right" if step_x > 0 else "left")
+        elif step_y != 0:
+            self._set_direction("down" if step_y > 0 else "up")
+        self._try_step(step_x, step_y, collisions)
+        return False
+
     def _ai_move(self, dt: float) -> None:
-        """Simulation simple : idle → marche aléatoire → parfois rentre vers la maison."""
+        """Routine type grand jeu : idle, patrouille, travail, maison."""
         self._timer -= dt
         collisions = getattr(self, "_collisions", [])
 
         if self._state == "idle":
             if self._timer <= 0:
-                # 70% marcher, 20% rentrer chez soi, 10% rester
                 r = random.random()
-                if r < 0.7:
+                if r < 0.45:
                     self._state = "walk"
                     angle = random.choice(
                         [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]
@@ -148,12 +167,15 @@ class NPC(Entity):
                         self._set_direction("right" if self._walk_dx > 0 else "left")
                     elif self._walk_dy != 0:
                         self._set_direction("down" if self._walk_dy > 0 else "up")
-                    self._timer = random.uniform(1.0, 3.5)
-                elif r < 0.9 and self.home.length_squared() > 0:
+                    self._timer = random.uniform(1.2, 3.5)
+                elif r < 0.7:
+                    self._state = "work"
+                    self._timer = 8.0
+                elif r < 0.9:
                     self._state = "home"
-                    self._timer = 4.0
+                    self._timer = 8.0
                 else:
-                    self._timer = random.uniform(1.0, 2.5)
+                    self._timer = random.uniform(1.5, 3.0)
 
         elif self._state == "walk":
             self._try_step(self._walk_dx, self._walk_dy, collisions)
@@ -163,22 +185,14 @@ class NPC(Entity):
                 self._timer = random.uniform(0.8, 2.5)
 
         elif self._state == "home":
-            # se dirige vers home
-            dx = self.home.x - self.position.x
-            dy = self.home.y - self.position.y
-            dist = (dx * dx + dy * dy) ** 0.5
-            if dist < 4:
+            if self._go_toward(self.home, collisions) or self._timer <= 0:
                 self._state = "idle"
-                self._walk_dx = self._walk_dy = 0
                 self._timer = random.uniform(2.0, 5.0)
-            else:
-                step_x = (dx / dist) * self.speed if dist else 0
-                step_y = (dy / dist) * self.speed if dist else 0
-                if abs(step_x) > abs(step_y):
-                    self._set_direction("right" if step_x > 0 else "left")
-                elif step_y != 0:
-                    self._set_direction("down" if step_y > 0 else "up")
-                self._try_step(step_x, step_y, collisions)
+
+        elif self._state == "work":
+            if self._go_toward(self.work, collisions) or self._timer <= 0:
+                self._state = "idle"
+                self._timer = random.uniform(2.0, 4.0)
 
     def _try_step(self, dx: float, dy: float, collisions: list) -> None:
         if dx:
@@ -193,7 +207,7 @@ class NPC(Entity):
                 self.position.y += dy
 
     def _animate(self, dt: float) -> None:
-        walking = self._state in ("walk", "home") and not self._pause_until_talk
+        walking = self._state in ("walk", "home", "work") and not self._pause_until_talk
         frames = self._frames.get(self.direction) or self._frames.get("down") or [self.image]
         if walking:
             self._anim_timer += dt
