@@ -24,7 +24,7 @@ class Game:
         self.player: Player = Player(
             self.screen, self.controller, 512, 288, self.keylistener
         )
-        self.dialogue: Dialogue = Dialogue(self.player, self.screen)
+        self.dialogue: Dialogue = Dialogue(self.player, self.screen, lang="fr")
         self.save: Save = Save(
             "save_0", self.map, self.player, self.keylistener, self.dialogue
         )
@@ -79,7 +79,7 @@ class Game:
                     print(f"[MAP] Passage vers {switch.name} (port {switch.port})")
                 except Exception as e:
                     print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
-                    self.switch_cooldown = 45  # évite le spam si le switch est mal configuré
+                    self.switch_cooldown = 45
 
             if not getattr(self.player, "menu_option", False):
                 if getattr(self, "_no_map", False):
@@ -95,15 +95,19 @@ class Game:
                     try:
                         self.map.update()
                     except pygame.error as e:
-                        # Surface fermée / non initialisée → on arrête proprement
                         print(f"[WARN] Erreur d'affichage: {e}")
                         self.running = False
                         break
-                if pygame.K_e in self.keylistener.keys and not getattr(
-                    self.dialogue, "active", False
+
+                # Test dialogue (E) — à remplacer plus tard par interaction NPC/objets
+                action_key = self.controller.get_key("action")
+                if (
+                    self.keylistener.key_pressed(action_key)
+                    and not getattr(self.dialogue, "active", False)
                 ):
                     self.dialogue.load_data(1001, 0)
-                    self.keylistener.remove_key(pygame.K_e)
+                    self.keylistener.remove_key(action_key)
+
                 self.dialogue_controller()
             else:
                 self.option.update()
@@ -120,9 +124,10 @@ class Game:
         """Manage active dialogues."""
         if getattr(self.dialogue, "active", False):
             self.dialogue.update()
-            if self.keylistener.key_pressed(self.controller.get_key("action")):
+            action_key = self.controller.get_key("action")
+            if self.keylistener.key_pressed(action_key):
                 self.dialogue.action()
-                self.keylistener.remove_key(self.controller.get_key("action"))
+                self.keylistener.remove_key(action_key)
 
     def handle_input(self) -> None:
         """Handle pygame events."""
