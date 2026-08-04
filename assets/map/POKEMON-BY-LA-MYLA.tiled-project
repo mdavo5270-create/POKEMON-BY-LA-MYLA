@@ -1,0 +1,48 @@
+{
+    "automappingRulesFile": "rules/rules.txt",
+    "commands": [
+    ],
+    "extensionsPath": "extensions",
+    "folders": [
+        ".",
+        "tileset"
+    ],
+    "propertyTypes": [
+        {
+            "id": 1,
+            "name": "TileType",
+            "storageType": "string",
+            "type": "enum",
+            "values": [
+                "ground",
+                "grass",
+                "water",
+                "sand",
+                "path",
+                "wall",
+                "door",
+                "stairs",
+                "ice",
+                "tall_grass"
+            ],
+            "valuesAsFlags": false
+        },
+        {
+            "id": 2,
+            "name": "ObjectType",
+            "storageType": "string",
+            "type": "enum",
+            "values": [
+                "collision",
+                "switch",
+                "spawn",
+                "dialogue",
+                "npc",
+                "item",
+                "trigger",
+                "warp"
+            ],
+            "valuesAsFlags": false
+        }
+    ]
+}
