@@ -1,0 +1,8 @@
+# Automapping rules for POKEMON BY LA MYLA
+# Place rule maps in this folder. Each .tmx rule map is listed here.
+# Format: relative path to rule map
+
+# Example rules (create the corresponding .tmx files in Tiled):
+# grass_edges.tmx
+# water_edges.tmx
+# path_auto.tmx
