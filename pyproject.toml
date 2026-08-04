@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokemon-by-la-myla"
+version = "1.0.0"
+description = "POKEMON BY LA MYLA - Clean final Pokémon fan-game in Python/Pygame"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "La Myla"}, {name = "Community"}]
+dependencies = [
+    "pygame>=2.5.0",
+    "PyTMX>=3.32",
+    "pyscroll>=2.31",
+    "numpy>=1.24",
+]
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "ruff", "mypy", "black"]
+[project.scripts]
+pokemon-game = "pokemon_game.main:main"
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
