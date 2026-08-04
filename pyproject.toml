@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "La Myla"}, {name = "Community"}]
 dependencies = [
-    "pygame>=2.5.0",
+    "pygame-ce>=2.5.0",
     "PyTMX>=3.32",
     "pyscroll>=2.31",
     "numpy>=1.24",
