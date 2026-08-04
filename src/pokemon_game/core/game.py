@@ -24,18 +24,23 @@ class Game:
 
     VIRTUAL_WARPS: dict[str, list[tuple]] = {
         "map_0": [
-            (pygame.Rect(512, 256, 16, 16), "house_0", 0),
-            (pygame.Rect(560, 256, 16, 16), "house_1", 0),
-            (pygame.Rect(480, 256, 16, 16), "labo_0", 0),
-            (pygame.Rect(448, 256, 16, 16), "pokecenter", 0),
-            (pygame.Rect(416, 256, 16, 16), "pokeshop", 0),
+            # Maison d'Aria (porte Tiled ~512,256) — zone large
+            (pygame.Rect(496, 240, 48, 40), "house_0", 0),
+            # Maison du Rival
+            (pygame.Rect(560, 240, 48, 40), "house_1", 0),
+            # Laboratoire
+            (pygame.Rect(448, 240, 48, 40), "labo_0", 0),
+            # Centre Pokémon
+            (pygame.Rect(400, 240, 48, 40), "pokecenter", 0),
+            # Boutique
+            (pygame.Rect(352, 240, 48, 40), "pokeshop", 0),
         ],
-        "house_0": [(pygame.Rect(400, 400, 48, 32), "map_0", 0)],
-        "house_1": [(pygame.Rect(100, 200, 48, 32), "map_0", 0)],
-        "labo_0": [(pygame.Rect(120, 150, 48, 32), "map_0", 0)],
-        "pokecenter": [(pygame.Rect(110, 280, 48, 32), "map_0", 0)],
-        "pokeshop": [(pygame.Rect(70, 140, 48, 32), "map_0", 0)],
-        "inter_0": [(pygame.Rect(100, 200, 48, 32), "map_0", 0)],
+        "house_0": [(pygame.Rect(400, 400, 64, 40), "map_0", 0)],
+        "house_1": [(pygame.Rect(88, 200, 64, 40), "map_0", 0)],
+        "labo_0": [(pygame.Rect(104, 144, 64, 40), "map_0", 0)],
+        "pokecenter": [(pygame.Rect(96, 288, 64, 40), "map_0", 0)],
+        "pokeshop": [(pygame.Rect(48, 128, 64, 40), "map_0", 0)],
+        "inter_0": [(pygame.Rect(48, 128, 64, 40), "map_0", 0)],
     }
 
     def __init__(self) -> None:
@@ -154,6 +159,9 @@ class Game:
                 building=cit.building,
                 use_ai=True,
             )
+            # PNJ respectent les murs de la map
+            if hasattr(npc, "set_collisions"):
+                npc.set_collisions(list(getattr(self.map, "collisions", []) or []))
             self.map.add_npc(npc)
 
         if map_name == "map_0":
@@ -356,6 +364,11 @@ class Game:
             if self.keylistener.key_pressed(action_key):
                 self.dialogue.action()
                 self.keylistener.remove_key(action_key)
+                # Si dialogue terminé → PNJ reprennent leur vie
+                if not getattr(self.dialogue, "active", False):
+                    for ent in getattr(self.map, "npc_entities", []) or []:
+                        if hasattr(ent, "resume_after_talk"):
+                            ent.resume_after_talk()
 
     def handle_input(self) -> None:
         for event in pygame.event.get():
