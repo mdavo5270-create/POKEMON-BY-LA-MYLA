@@ -41,6 +41,8 @@ class Player(Entity):
         self.animation_timer = 0.0  # secondes
         self.animation_interval = 0.12  # ~8 FPS d'anim, indépendant du framerate
         self.pending_switch: Switch | None = None
+        self._dialogue_lock = False
+        self.team: list = []  # liste de Pokemon
 
         self._load_sprites()
         self.rect = self.image.get_rect(topleft=(x, y))
@@ -55,7 +57,6 @@ class Player(Entity):
             except Exception as exc:
                 print(f"[SPRITE] Impossible de charger {filename}: {exc}")
 
-        # Fallback minimal si rien n'a marché
         if not self.sheets:
             dummy = SpriteSheet.__new__(SpriteSheet)
             dummy._make_dummy()
@@ -77,7 +78,6 @@ class Player(Entity):
         self.images = self.current_sheet.frames
         self.animation_index = 0
         self.animation_timer = 0.0
-        # Garde la direction courante
         frames = self.images.get(self.direction) or self.images.get("down")
         if frames:
             self.image = frames[0]
@@ -86,7 +86,6 @@ class Player(Entity):
         self.collisions = collisions or []
 
     def add_switchs(self, switchs: list) -> None:
-        # Ignore les faux switches nommés "spawn"
         self.switchs = [s for s in (switchs or []) if s.name.lower() != "spawn"]
         print(f"[SWITCH] {len(self.switchs)} switch(es) chargés pour le joueur (spawn exclus)")
         for s in self.switchs:
@@ -110,10 +109,9 @@ class Player(Entity):
             self.keylistener.key_pressed(self.controller.get_key(k))
             for k in ("up", "down", "left", "right")
         )
-        # deltatime en ms → secondes
         dt = (self.screen.get_delta_time() or 16.0) / 1000.0
 
-        if moving:
+        if moving and not self._dialogue_lock:
             self.animation_timer += dt
             if self.animation_timer >= self.animation_interval:
                 self.animation_timer = 0.0
@@ -128,9 +126,27 @@ class Player(Entity):
             self.image = frames[self.animation_index % len(frames)]
 
     def handle_input(self) -> None:
-        dx = dy = 0
+        if self._dialogue_lock or self.menu_option:
+            return
+
         kl = self.keylistener
         c = self.controller
+
+        # Toggle vélo
+        if kl.key_pressed(c.get_key("bike")):
+            self.switch_bike()
+            kl.remove_key(c.get_key("bike"))
+
+        # Course (LSHIFT) — uniquement à pied
+        running = kl.key_pressed(c.get_key("run")) and not self.on_bike
+        if running:
+            self.speed = 2
+            self.set_animation("run")
+        elif not self.on_bike:
+            self.speed = 1
+            self.set_animation("walk")
+
+        dx = dy = 0
 
         if kl.key_pressed(c.get_key("up")):
             dy = -self.speed
