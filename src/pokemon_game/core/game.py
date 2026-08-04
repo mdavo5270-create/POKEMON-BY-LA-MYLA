@@ -41,9 +41,19 @@ class Game:
 
         # Cooldown anti-boucle de maps (en frames)
         self.switch_cooldown: int = 0
+        # Cooldown interaction E (évite double-trigger)
+        self.interact_cooldown: int = 0
 
         # Charger la map de départ + ajouter le joueur
         self._start_map()
+
+        # Si save avait une map pending, on la charge
+        pending = getattr(self.save, "_pending_map", None)
+        if pending and pending != "map_0":
+            try:
+                self.map.load_map(pending)
+            except Exception as e:
+                print(f"[SAVE] Map {pending} non rechargée: {e}")
 
     def _start_map(self) -> None:
         """Charge la map initiale et place le joueur."""
@@ -65,6 +75,8 @@ class Game:
 
             if self.switch_cooldown > 0:
                 self.switch_cooldown -= 1
+            if self.interact_cooldown > 0:
+                self.interact_cooldown -= 1
 
             # Changement de map demandé par le joueur
             if (
@@ -80,6 +92,18 @@ class Game:
                 except Exception as e:
                     print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
                     self.switch_cooldown = 45
+
+            # ESC → menu pause
+            menu_key = self.controller.get_key("menu")
+            if (
+                self.keylistener.key_pressed(menu_key)
+                and not getattr(self.dialogue, "active", False)
+            ):
+                if not self.player.menu_option:
+                    self.option.open(self.player)
+                else:
+                    self.option.close()
+                self.keylistener.remove_key(menu_key)
 
             if not getattr(self.player, "menu_option", False):
                 if getattr(self, "_no_map", False):
@@ -99,17 +123,25 @@ class Game:
                         self.running = False
                         break
 
-                # Test dialogue (E) — à remplacer plus tard par interaction NPC/objets
+                # Interaction E avec dialogues / NPCs de la map
                 action_key = self.controller.get_key("action")
                 if (
                     self.keylistener.key_pressed(action_key)
                     and not getattr(self.dialogue, "active", False)
+                    and self.interact_cooldown <= 0
                 ):
-                    self.dialogue.load_data(1001, 0)
+                    self._try_interact()
                     self.keylistener.remove_key(action_key)
+                    self.interact_cooldown = 20
 
                 self.dialogue_controller()
             else:
+                # Menu ouvert : on dessine quand même la map en fond (optionnel)
+                if not getattr(self, "_no_map", False):
+                    try:
+                        self.map.update()
+                    except pygame.error:
+                        pass
                 self.option.update()
                 self.dialogue_controller()
                 self.option.check_inputs()
@@ -119,6 +151,72 @@ class Game:
             except pygame.error:
                 self.running = False
                 break
+
+    def _try_interact(self) -> None:
+        """Cherche un dialogue ou NPC proche du joueur et le déclenche."""
+        if not self.player or not self.map:
+            return
+
+        # Zone d'interaction : devant le joueur + un peu autour
+        hit = self.player.hitbox.inflate(24, 24)
+        direction = getattr(self.player, "direction", "down")
+        offset = {
+            "up": (0, -20),
+            "down": (0, 20),
+            "left": (-20, 0),
+            "right": (20, 0),
+        }.get(direction, (0, 0))
+        front = hit.move(*offset)
+
+        # 1) Dialogues placés sur la map
+        for d in getattr(self.map, "dialogues", []) or []:
+            rect = d.get("rect")
+            if rect and (front.colliderect(rect) or hit.colliderect(rect)):
+                did = d.get("id") or 0
+                try:
+                    did = int(did)
+                except (TypeError, ValueError):
+                    did = 0
+                if did:
+                    print(f"[INTERACT] Dialogue {did}")
+                    self.dialogue.load_data(did, 0)
+                    return
+
+        # 2) NPCs → dialogue via propriété ou id dans le nom
+        for npc in getattr(self.map, "npcs", []) or []:
+            rect = npc.get("rect")
+            if rect and (front.colliderect(rect) or hit.colliderect(rect)):
+                props = npc.get("properties") or {}
+                did = props.get("dialogue_id") or props.get("dialogue")
+                if did is None:
+                    # "npc 1001" → 1001
+                    parts = (npc.get("name") or "").split()
+                    for p in parts[1:]:
+                        try:
+                            did = int(p)
+                            break
+                        except ValueError:
+                            continue
+                if did:
+                    try:
+                        did = int(did)
+                    except (TypeError, ValueError):
+                        did = 0
+                if did:
+                    print(f"[INTERACT] NPC → dialogue {did}")
+                    self.dialogue.load_data(did, 0)
+                    return
+                # Fallback : message générique
+                self.dialogue.pages = [
+                    {"name": None, "text": "..."}
+                ]
+                self.dialogue.page_index = 0
+                self.dialogue.active = True
+                setattr(self.player, "_dialogue_lock", True)
+                return
+
+        # 3) Rien à proximité → pas de dialogue de test hardcodé
+        print("[INTERACT] Rien à proximité")
 
     def dialogue_controller(self) -> None:
         """Manage active dialogues."""
