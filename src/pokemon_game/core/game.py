@@ -39,6 +39,9 @@ class Game:
             self.dialogue,
         )
 
+        # Cooldown anti-boucle de maps (en frames)
+        self.switch_cooldown: int = 0
+
         # Charger la map de départ + ajouter le joueur
         self._start_map()
 
@@ -47,10 +50,10 @@ class Game:
         try:
             self.map.add_player(self.player)
             self.map.load_map("map_0")
+            self.switch_cooldown = 30  # évite un switch immédiat au spawn
         except Exception as e:
             print(f"[WARN] Impossible de charger map_0: {e}")
             print("Vérifie que assets/map/map_0.tmx existe.")
-            # Affiche un fond coloré pour confirmer que le jeu tourne
             self._no_map = True
         else:
             self._no_map = False
@@ -60,29 +63,44 @@ class Game:
         while self.running:
             self.handle_input()
 
+            if self.switch_cooldown > 0:
+                self.switch_cooldown -= 1
+
             # Changement de map demandé par le joueur
-            if getattr(self.player, "pending_switch", None):
+            if (
+                getattr(self.player, "pending_switch", None)
+                and self.switch_cooldown <= 0
+            ):
                 switch = self.player.pending_switch
                 self.player.pending_switch = None
                 try:
                     self.map.switch_map(switch)
+                    self.switch_cooldown = 45  # ~0.75s à 60 FPS
                     print(f"[MAP] Passage vers {switch.name} (port {switch.port})")
                 except Exception as e:
                     print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
 
             if not getattr(self.player, "menu_option", False):
                 if getattr(self, "_no_map", False):
-                    # Fond vert = le jeu tourne, mais pas de map
                     self.screen.get_display().fill((34, 139, 34))
                     font = pygame.font.SysFont(None, 36)
-                    txt = font.render("POKEMON BY LA MYLA - map manquante", True, (255, 255, 255))
+                    txt = font.render(
+                        "POKEMON BY LA MYLA - map manquante", True, (255, 255, 255)
+                    )
                     self.screen.get_display().blit(txt, (40, 40))
-                    # Dessine le joueur même sans map
                     self.player.update()
                     self.screen.get_display().blit(self.player.image, self.player.rect)
                 else:
-                    self.map.update()
-                if pygame.K_e in self.keylistener.keys and not getattr(self.dialogue, "active", False):
+                    try:
+                        self.map.update()
+                    except pygame.error as e:
+                        # Surface fermée / non initialisée → on arrête proprement
+                        print(f"[WARN] Erreur d'affichage: {e}")
+                        self.running = False
+                        break
+                if pygame.K_e in self.keylistener.keys and not getattr(
+                    self.dialogue, "active", False
+                ):
                     self.dialogue.load_data(1001, 0)
                     self.keylistener.remove_key(pygame.K_e)
                 self.dialogue_controller()
@@ -90,7 +108,12 @@ class Game:
                 self.option.update()
                 self.dialogue_controller()
                 self.option.check_inputs()
-            self.screen.update()
+
+            try:
+                self.screen.update()
+            except pygame.error:
+                self.running = False
+                break
 
     def dialogue_controller(self) -> None:
         """Manage active dialogues."""
@@ -105,7 +128,6 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-                pygame.quit()
             elif event.type == pygame.KEYDOWN:
                 self.keylistener.add_key(event.key)
             elif event.type == pygame.KEYUP:

@@ -72,12 +72,13 @@ class Map:
             self.pose_player(switch)
             self.player.align_hitbox()
             self.player.step = 16
+            self.player.pending_switch = None  # reset
             self.player.add_switchs(self.switchs)
             self.player.add_collisions(self.collisions)
             self.group.add(self.player)
             if switch.name.split("_")[0] != "map":
                 if hasattr(self.player, "switch_bike"):
-                    self.player.switch_bike(True)
+                    self.player.switch_bike(force=False)  # pas de vélo en intérieur
 
         self.current_map = switch
 
@@ -90,18 +91,42 @@ class Map:
         if self.group and self.player:
             self.group.update()
             self.group.center(self.player.rect.center)
-            self.group.draw(self.screen.get_display())
+            display = self.screen.get_display()
+            if display is not None:
+                self.group.draw(display)
             if self.animation_change_map_active:
                 self.draw_change_map()
 
     def pose_player(self, switch: Switch) -> None:
+        """Place le joueur sur le bon spawn."""
         if not self.player or not self.tmx_data:
             return
+
+        port_str = str(switch.port)
+        # 1) Cherche un spawn qui contient le port
         for obj in self.tmx_data.objects:
-            name = (obj.name or "").strip()
-            if name.startswith("spawn ") and str(switch.port) in name:
+            name = (obj.name or "").strip().lower()
+            if name.startswith("spawn") and port_str in name.split():
                 self.player.position = pygame.math.Vector2(obj.x, obj.y)
+                print(f"[SPAWN] {name} → ({obj.x}, {obj.y})")
                 return
+
+        # 2) Cherche dans le dict spawns parsé
+        for key, pos in self.spawns.items():
+            if port_str in key.split():
+                self.player.position = pos
+                print(f"[SPAWN] dict {key} → {pos}")
+                return
+
+        # 3) Fallback : premier spawn trouvé
+        for obj in self.tmx_data.objects:
+            name = (obj.name or "").strip().lower()
+            if name.startswith("spawn"):
+                self.player.position = pygame.math.Vector2(obj.x, obj.y)
+                print(f"[SPAWN] fallback {name} → ({obj.x}, {obj.y})")
+                return
+
+        print(f"[SPAWN] Aucun spawn trouvé pour port={switch.port}, position inchangée")
 
     def set_draw_change_map(self, map_name: str) -> None:
         if not self.animation_change_map_active:
@@ -130,19 +155,27 @@ class Map:
             surface = self.get_surface_change_map(255)
             if self.map_name_text:
                 Tool.add_text_to_surface(
-                    surface, self.map_name_text,
-                    surface.get_width() // 2 - self.map_name_text.get_width() // 2, 4,
+                    surface,
+                    self.map_name_text,
+                    surface.get_width() // 2 - self.map_name_text.get_width() // 2,
+                    4,
                 )
-            self.screen.display.blit(surface, (self.screen.display.get_width() - 255, 600))
+            self.screen.display.blit(
+                surface, (self.screen.display.get_width() - 255, 600)
+            )
             self.animation_change_map += 2
         elif self.animation_change_map < 1279:
             surface = self.get_surface_change_map(1279 - self.animation_change_map)
             if self.map_name_text:
                 Tool.add_text_to_surface(
-                    surface, self.map_name_text,
-                    surface.get_width() // 2 - self.map_name_text.get_width() // 2, 4,
+                    surface,
+                    self.map_name_text,
+                    surface.get_width() // 2 - self.map_name_text.get_width() // 2,
+                    4,
                 )
-            self.screen.display.blit(surface, (self.screen.display.get_width() - 255, 600))
+            self.screen.display.blit(
+                surface, (self.screen.display.get_width() - 255, 600)
+            )
             self.animation_change_map += 5
         else:
             self.animation_change_map_active = False
