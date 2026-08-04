@@ -45,6 +45,15 @@ class Map:
             self.image_change_map = pygame.Surface((215, 53), pygame.SRCALPHA)
 
     def switch_map(self, switch: Switch) -> None:
+        if switch.name.lower() == "spawn":
+            # Convention Tiled : ce switch ne change pas de map, il replace juste
+            # le joueur au point d'apparition correspondant sur la map ACTUELLE.
+            if self.player:
+                self.pose_player(switch)
+                self.player.step = 16
+                self.player.pending_switch = None
+            return
+
         path = asset_path("map", f"{switch.name}.tmx")
         self.tmx_data = pytmx.load_pygame(path)
         map_data = pyscroll.data.TiledMapData(self.tmx_data)

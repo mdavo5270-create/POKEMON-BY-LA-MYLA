@@ -79,6 +79,7 @@ class Game:
                     print(f"[MAP] Passage vers {switch.name} (port {switch.port})")
                 except Exception as e:
                     print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
+                    self.switch_cooldown = 45  # évite le spam si le switch est mal configuré
 
             if not getattr(self.player, "menu_option", False):
                 if getattr(self, "_no_map", False):
