@@ -1,0 +1,152 @@
+"""Map management with Tiled + pyscroll."""
+from __future__ import annotations
+
+import pygame
+import pyscroll
+import pytmx
+
+from pokemon_game.core.controller import Controller
+from pokemon_game.core.screen import Screen
+from pokemon_game.core.switch import Switch
+from pokemon_game.core.tool import Tool, asset_path
+from pokemon_game.core.map_objects import parse_objects
+
+
+class Map:
+    """Map class to manage the map."""
+
+    def __init__(self, screen: Screen, controller: Controller) -> None:
+        self.screen = screen
+        self.controller = controller
+        self.tmx_data: pytmx.TiledMap | None = None
+        self.map_layer: pyscroll.BufferedRenderer | None = None
+        self.group: pyscroll.PyscrollGroup | None = None
+
+        self.player = None
+        self.switchs: list[Switch] = []
+        self.collisions: list[pygame.Rect] = []
+        self.stairs: dict = {}
+        self.dialogues: list = []
+        self.npcs: list = []
+        self.triggers: list = []
+        self.spawns: dict = {}
+
+        self.current_map: Switch | None = None
+        self.map_name: str | None = None
+        self.map_name_text = None
+
+        self.animation_change_map = 0
+        self.animation_change_map_active = False
+        try:
+            self.image_change_map = pygame.image.load(
+                asset_path("interfaces", "maps", "frame_map.png")
+            ).convert_alpha()
+        except Exception:
+            self.image_change_map = pygame.Surface((215, 53), pygame.SRCALPHA)
+
+    def switch_map(self, switch: Switch) -> None:
+        path = asset_path("map", f"{switch.name}.tmx")
+        self.tmx_data = pytmx.load_pygame(path)
+        map_data = pyscroll.data.TiledMapData(self.tmx_data)
+        self.map_layer = pyscroll.BufferedRenderer(map_data, self.screen.get_size())
+        self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer, default_layer=9)
+        self.animation_change_map = 0
+        self.animation_change_map_active = False
+
+        if switch.name.split("_")[0] == "map":
+            self.map_layer.zoom = 3
+            self.set_draw_change_map(switch.name)
+        else:
+            self.map_layer.zoom = 4
+
+        parsed = parse_objects(self.tmx_data)
+        self.switchs = parsed.switches
+        self.collisions = parsed.collisions
+        self.stairs = parsed.stairs
+        self.dialogues = parsed.dialogues
+        self.npcs = parsed.npcs
+        self.triggers = parsed.triggers
+        self.spawns = parsed.spawns
+
+        if self.player:
+            self.pose_player(switch)
+            self.player.align_hitbox()
+            self.player.step = 16
+            self.player.add_switchs(self.switchs)
+            self.player.add_collisions(self.collisions)
+            self.group.add(self.player)
+            if switch.name.split("_")[0] != "map":
+                if hasattr(self.player, "switch_bike"):
+                    self.player.switch_bike(True)
+
+        self.current_map = switch
+
+    def add_player(self, player) -> None:
+        self.player = player
+        if self.group:
+            self.group.add(player)
+
+    def update(self) -> None:
+        if self.group and self.player:
+            self.group.update()
+            self.group.center(self.player.rect.center)
+            self.group.draw(self.screen.get_display())
+            if self.animation_change_map_active:
+                self.draw_change_map()
+
+    def pose_player(self, switch: Switch) -> None:
+        if not self.player or not self.tmx_data:
+            return
+        for obj in self.tmx_data.objects:
+            name = (obj.name or "").strip()
+            if name.startswith("spawn ") and str(switch.port) in name:
+                self.player.position = pygame.math.Vector2(obj.x, obj.y)
+                return
+
+    def set_draw_change_map(self, map_name: str) -> None:
+        if not self.animation_change_map_active:
+            self.map_name = map_name
+            self.animation_change_map_active = True
+            self.animation_change_map = 0
+            try:
+                self.map_name_text = Tool.create_text(self.map_name, 30, (255, 255, 255))
+            except Exception:
+                self.map_name_text = pygame.Surface((10, 10))
+
+    def get_surface_change_map(self, alpha: int = 0) -> pygame.Surface:
+        surface = pygame.Surface((215, 53), pygame.SRCALPHA).convert_alpha()
+        surface.blit(self.image_change_map, (0, 0))
+        surface.set_alpha(alpha)
+        return surface
+
+    def draw_change_map(self) -> None:
+        if self.animation_change_map < 255:
+            surface = self.get_surface_change_map(self.animation_change_map)
+            self.screen.display.blit(
+                surface, (self.screen.display.get_width() - self.animation_change_map, 600)
+            )
+            self.animation_change_map += 5
+        elif self.animation_change_map < 1024:
+            surface = self.get_surface_change_map(255)
+            if self.map_name_text:
+                Tool.add_text_to_surface(
+                    surface, self.map_name_text,
+                    surface.get_width() // 2 - self.map_name_text.get_width() // 2, 4,
+                )
+            self.screen.display.blit(surface, (self.screen.display.get_width() - 255, 600))
+            self.animation_change_map += 2
+        elif self.animation_change_map < 1279:
+            surface = self.get_surface_change_map(1279 - self.animation_change_map)
+            if self.map_name_text:
+                Tool.add_text_to_surface(
+                    surface, self.map_name_text,
+                    surface.get_width() // 2 - self.map_name_text.get_width() // 2, 4,
+                )
+            self.screen.display.blit(surface, (self.screen.display.get_width() - 255, 600))
+            self.animation_change_map += 5
+        else:
+            self.animation_change_map_active = False
+            self.animation_change_map = 0
+
+    def load_map(self, map_name: str) -> None:
+        self.switch_map(Switch("switch", map_name, pygame.Rect(0, 0, 0, 0), 0))
