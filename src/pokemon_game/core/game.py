@@ -59,6 +59,17 @@ class Game:
         """Run the game loop."""
         while self.running:
             self.handle_input()
+
+            # Changement de map demandé par le joueur
+            if getattr(self.player, "pending_switch", None):
+                switch = self.player.pending_switch
+                self.player.pending_switch = None
+                try:
+                    self.map.switch_map(switch)
+                    print(f"[MAP] Passage vers {switch.name} (port {switch.port})")
+                except Exception as e:
+                    print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
+
             if not getattr(self.player, "menu_option", False):
                 if getattr(self, "_no_map", False):
                     # Fond vert = le jeu tourne, mais pas de map
