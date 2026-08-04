@@ -120,16 +120,14 @@ class Map:
             self.group.add(player)
 
     def add_npc(self, npc) -> None:
-        """Ajoute une entité NPC (sprite) à la map courante."""
+        """Ajoute une entité NPC (sprite) — PAS de collision solide (évite de bloquer le joueur)."""
         if not hasattr(self, "npc_entities"):
             self.npc_entities = []
         self.npc_entities.append(npc)
         if self.group:
             self.group.add(npc)
-        if hasattr(npc, "hitbox"):
-            self.collisions.append(npc.hitbox)
-            if self.player:
-                self.player.add_collisions(self.collisions)
+        # Pas d'ajout aux collisions : le joueur doit pouvoir marcher librement.
+        # L'interaction se fait via hitbox dans Game._try_interact.
         print(f"[NPC] {getattr(npc, 'name', 'NPC')} @ ({npc.position.x:.0f}, {npc.position.y:.0f})")
 
     def update(self) -> None:

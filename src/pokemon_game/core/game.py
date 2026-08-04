@@ -76,6 +76,12 @@ class Game:
                 print(f"[SAVE] Map {pending} non rechargée: {e}")
 
         self._spawn_citizens()
+        # S'assurer que le joueur peut bouger
+        if hasattr(self.player, "unlock"):
+            self.player.unlock()
+        else:
+            self.player._dialogue_lock = False
+            self.player.menu_option = False
 
     def _give_starter_if_needed(self) -> None:
         if getattr(self.player, "team", None) and len(self.player.team) > 0:
@@ -118,8 +124,8 @@ class Game:
             "map_0": [
                 {
                     "key": "aria",
-                    "x": self.player.position.x + 40,
-                    "y": self.player.position.y,
+                    "x": self.player.position.x + 80,
+                    "y": self.player.position.y + 16,
                     "dir": "left",
                 },
                 {"key": "rival", "x": 580, "y": 280, "dir": "down"},
@@ -156,13 +162,23 @@ class Game:
                 print(f"         {r}")
 
     def _check_virtual_warps(self) -> None:
+        """Warp uniquement à l'ENTRÉE dans la zone (comme les switches Tiled)."""
         if self.switch_cooldown > 0 or not self.player:
+            return
+        if getattr(self.player, "_dialogue_lock", False) or getattr(
+            self.player, "menu_option", False
+        ):
             return
         map_name = getattr(self.map, "map_name", None) or "map_0"
         warps = self.VIRTUAL_WARPS.get(map_name, [])
         hit = self.player.hitbox
+        # Position précédente approximative (avant ce frame) pour détecter l'entrée
+        prev = getattr(self, "_prev_player_hitbox", None)
+        self._prev_player_hitbox = hit.copy()
         for rect, target, port in warps:
-            if hit.colliderect(rect):
+            now_in = hit.colliderect(rect)
+            was_in = prev.colliderect(rect) if prev is not None else False
+            if now_in and not was_in:
                 if getattr(self.player, "pending_switch", None):
                     return
                 self.player.pending_switch = Switch("switch", target, rect, port)
