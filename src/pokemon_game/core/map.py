@@ -13,6 +13,8 @@ from pokemon_game.core.screen import Screen
 from pokemon_game.core.switch import Switch
 from pokemon_game.core.tool import Tool, asset_path
 from pokemon_game.systems.furniture import get_furniture_rects, draw_furniture
+import json
+from pokemon_game.entities.house import House
 
 
 class Map:
@@ -35,6 +37,7 @@ class Map:
         self.dialogues: list = []
         self.npcs: list = []          # données Tiled (dicts)
         self.npc_entities: list = []  # sprites PNJ vivants
+        self.houses: list = []  # House sprite entities
         self.triggers: list = []
         self.spawns: dict = {}
 
@@ -123,6 +126,11 @@ class Map:
             if self.group and ent in self.group:
                 self.group.remove(ent)
         self.npc_entities = []
+        # Remove previous houses from group
+        for house in getattr(self, "houses", []) or []:
+            if self.group and house in self.group:
+                self.group.remove(house)
+        self.houses = []
 
         if self.player:
             self.pose_player(switch)
@@ -137,6 +145,11 @@ class Map:
 
         self.current_map = switch
         self.map_name = switch.name
+        # Load houses for this map (assets/houses/<map_name>/...)
+        try:
+            self._load_houses(switch.name)
+        except Exception:
+            pass
 
     def add_player(self, player) -> None:
         self.player = player
@@ -269,6 +282,42 @@ class Map:
         else:
             self.animation_change_map_active = False
             self.animation_change_map = 0
+
+    def _load_houses(self, map_name: str) -> None:
+        """Look for house metadata under assets/houses/<map_name>/ and spawn House objects.
+
+        Accepts either per-house folder with meta.json or individual json files.
+        """
+        base = Path(asset_path("houses", map_name))
+        if not base.exists():
+            return
+        loaded: list[House] = []
+        for child in sorted(base.iterdir()):
+            if child.is_dir():
+                meta = child / "meta.json"
+                if not meta.exists():
+                    # try any json in folder
+                    jfiles = list(child.glob("*.json"))
+                    if not jfiles:
+                        continue
+                    meta = jfiles[0]
+            else:
+                if child.suffix.lower() != ".json":
+                    continue
+                meta = child
+            try:
+                with meta.open(encoding="utf-8") as f:
+                    data = json.load(f)
+                house = House.from_dict(data)
+                loaded.append(house)
+                if self.group:
+                    try:
+                        self.group.add(house)
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"[HOUSE] meta load failed {meta}: {e}")
+        self.houses = loaded
 
     def load_map(self, map_name: str) -> None:
         self.switch_map(Switch("switch", map_name, pygame.Rect(0, 0, 0, 0), 0))
