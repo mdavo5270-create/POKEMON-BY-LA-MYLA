@@ -59,8 +59,17 @@ class Move:
     def createMove(name: str) -> "Move":
         """Create a move from its dbSymbol/name (looked up in assets/json/moves)."""
         path = asset_path("json", "moves", f"{name.lower()}.json")
-        with open(path, encoding="utf-8") as f:
-            return Move(json.load(f))
+        try:
+            with open(path, encoding="utf-8") as f:
+                return Move(json.load(f))
+        except FileNotFoundError:
+            # Fallback tackle pour moves manquants
+            print(f"[MOVE] Fallback tackle pour {name}")
+            path2 = asset_path("json", "moves", "tackle.json")
+            with open(path2, encoding="utf-8") as f:
+                data = json.load(f)
+            data["dbSymbol"] = name.lower()
+            return Move(data)
 
     def to_dict(self) -> dict:
         """Convertir l'objet Move en dictionnaire sérialisable."""

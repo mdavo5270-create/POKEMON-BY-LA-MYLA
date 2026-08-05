@@ -1,13 +1,29 @@
-"""Player entity - sprite robuste + switches prioritaires + debug."""
+"""Player entity — spritesheet optimisé (cache + 25×32) + animation temps réel."""
 from __future__ import annotations
+
 import pygame
-from pathlib import Path
-from pokemon_game.entities.entity import Entity
-from pokemon_game.core.screen import Screen
+
 from pokemon_game.core.controller import Controller
 from pokemon_game.core.keylistener import KeyListener
-from pokemon_game.core.tool import asset_path, Tool, ASSETS
+from pokemon_game.core.screen import Screen
+from pokemon_game.core.spritesheet import SpriteSheet
 from pokemon_game.core.switch import Switch
+from pokemon_game.entities.entity import Entity
+
+_ANIM_FILES = {
+    "walk": "hero_01_red_m_walk.png",
+    "run": "hero_01_red_m_run.png",
+    "bike": "hero_01_red_m_cycle_wheel.png",
+    "surf": "hero_01_red_m_surf.png",
+}
+
+# Fallback touches (QWERTY + flèches) en plus du controller AZERTY
+_DIR_FALLBACKS = {
+    "up": (pygame.K_UP, pygame.K_w),
+    "down": (pygame.K_DOWN, pygame.K_s),  # S déjà AZERTY down
+    "left": (pygame.K_LEFT, pygame.K_a),
+    "right": (pygame.K_RIGHT, pygame.K_d),  # D déjà AZERTY right
+}
 
 
 class Player(Entity):
@@ -29,102 +45,56 @@ class Player(Entity):
         self.speed = 1
         self.on_bike = False
         self.animation_index = 0
-        self.animation_timer = 0
-        self.animation_speed = 8
+        self.animation_timer = 0.0
+        self.animation_interval = 0.12
         self.pending_switch: Switch | None = None
+        self._dialogue_lock = False
+        self.team: list = []
+        self.inventory = None  # set by Game (Inventory)
+        self._moving = False  # pour l'anim même si collision bloque un axe
 
         self._load_sprites()
         self.rect = self.image.get_rect(topleft=(x, y))
         self.align_hitbox()
 
     def _load_sprites(self) -> None:
-        """Charge le spritesheet avec plusieurs chemins possibles + debug."""
-        candidates = [
-            asset_path("sprite", "hero_01_red_m_walk.png"),
-            asset_path("sprites", "hero_01_red_m_walk.png"),
-            asset_path("sprite", "player.png"),
-            asset_path("sprite", "hero.png"),
-            str(ASSETS / "sprite" / "hero_01_red_m_walk.png"),
-        ]
+        self.sheets: dict[str, SpriteSheet] = {}
+        for key, filename in _ANIM_FILES.items():
+            try:
+                self.sheets[key] = SpriteSheet.load(filename)
+            except Exception as exc:
+                print(f"[SPRITE] Impossible de charger {filename}: {exc}")
 
-        # Cherche aussi récursivement dans assets/
-        sprite_dir = ASSETS / "sprite"
-        if sprite_dir.exists():
-            for p in sprite_dir.rglob("*.png"):
-                if "hero" in p.name.lower() or "red" in p.name.lower() or "walk" in p.name.lower():
-                    candidates.append(str(p))
+        if not self.sheets:
+            dummy = SpriteSheet.__new__(SpriteSheet)
+            dummy._make_dummy()
+            self.sheets["walk"] = dummy
 
-        sheet = None
-        used_path = None
-        for path in candidates:
-            if Path(path).exists():
-                try:
-                    sheet = pygame.image.load(path).convert_alpha()
-                    used_path = path
-                    break
-                except Exception as e:
-                    print(f"[SPRITE] Échec chargement {path}: {e}")
+        self.current_anim = "walk"
+        self.current_sheet = self.sheets.get("walk") or next(iter(self.sheets.values()))
+        self.images = self.current_sheet.frames
+        self.image = self.current_sheet.image
+        fw, fh = self.current_sheet.frame_size
+        print(f"[SPRITE] Joueur prêt — anim={list(self.sheets.keys())} frame={fw}x{fh}")
 
-        if sheet is None:
-            print("[SPRITE] AUCUN spritesheet trouvé ! Fallback rouge.")
-            print(f"[SPRITE] Dossier assets = {ASSETS}")
-            if (ASSETS / "sprite").exists():
-                print(f"[SPRITE] Fichiers dans assets/sprite : {[p.name for p in (ASSETS / 'sprite').iterdir()]}")
-            else:
-                print("[SPRITE] Le dossier assets/sprite n'existe pas.")
-            dummy = pygame.Surface((16, 24), pygame.SRCALPHA)
-            dummy.fill((220, 40, 40))
-            self.images = {d: [dummy] * 4 for d in ("down", "left", "right", "up")}
-            self.image = dummy
+    def set_animation(self, name: str) -> None:
+        if name not in self.sheets or name == self.current_anim:
             return
-
-        w, h = sheet.get_size()
-        print(f"[SPRITE] Chargé : {used_path} ({w}x{h})")
-
-        # Essai de layouts courants (16x24 par frame)
-        layouts = [
-            # rows = directions (down, left, right, up), cols = frames
-            {"fw": 16, "fh": 24, "order": ["down", "left", "right", "up"]},
-            {"fw": 16, "fh": 24, "order": ["down", "up", "left", "right"]},
-            {"fw": 16, "fh": 32, "order": ["down", "left", "right", "up"]},
-            {"fw": 32, "fh": 32, "order": ["down", "left", "right", "up"]},
-        ]
-
-        self.images = {}
-        loaded = False
-        for layout in layouts:
-            fw, fh = layout["fw"], layout["fh"]
-            order = layout["order"]
-            if w >= fw * 3 and h >= fh * 3:  # au moins 3 frames x 3 dirs
-                try:
-                    for row, direction in enumerate(order):
-                        frames = []
-                        for col in range(min(4, w // fw)):
-                            frames.append(Tool.split_image(sheet, col * fw, row * fh, fw, fh))
-                        if frames:
-                            self.images[direction] = frames
-                    if len(self.images) >= 4:
-                        loaded = True
-                        print(f"[SPRITE] Layout utilisé : {fw}x{fh} order={order}")
-                        break
-                except Exception:
-                    self.images = {}
-                    continue
-
-        if not loaded:
-            # Dernier recours : prendre juste le coin haut-gauche
-            print("[SPRITE] Layout non reconnu, utilisation de la première frame uniquement.")
-            frame = Tool.split_image(sheet, 0, 0, min(16, w), min(24, h))
-            self.images = {d: [frame] * 4 for d in ("down", "left", "right", "up")}
-
-        self.image = self.images.get("down", list(self.images.values())[0])[0]
+        self.current_anim = name
+        self.current_sheet = self.sheets[name]
+        self.images = self.current_sheet.frames
+        self.animation_index = 0
+        self.animation_timer = 0.0
+        frames = self.images.get(self.direction) or self.images.get("down")
+        if frames:
+            self.image = frames[0]
 
     def add_collisions(self, collisions: list) -> None:
         self.collisions = collisions or []
 
     def add_switchs(self, switchs: list) -> None:
-        self.switchs = switchs or []
-        print(f"[SWITCH] {len(self.switchs)} switch(es) chargés pour le joueur")
+        self.switchs = [s for s in (switchs or []) if s.name.lower() != "spawn"]
+        print(f"[SWITCH] {len(self.switchs)} switch(es) chargés pour le joueur (spawn exclus)")
         for s in self.switchs:
             print(f"         → {s.name} port={s.port} rect={s.hitbox}")
 
@@ -134,6 +104,23 @@ class Player(Entity):
         else:
             self.on_bike = not self.on_bike
         self.speed = 2 if self.on_bike else 1
+        self.set_animation("bike" if self.on_bike else "walk")
+
+    def unlock(self) -> None:
+        """Force la libération des locks (dialogue / menu)."""
+        self._dialogue_lock = False
+        self.menu_option = False
+
+    def _key_dir(self, direction: str) -> bool:
+        """True si la direction est pressée (controller + fallbacks flèches/WASD)."""
+        kl = self.keylistener
+        primary = self.controller.get_key(direction)
+        if kl.key_pressed(primary):
+            return True
+        for k in _DIR_FALLBACKS.get(direction, ()):
+            if kl.key_pressed(k):
+                return True
+        return False
 
     def update(self, *args, **kwargs) -> None:
         self.handle_input()
@@ -141,60 +128,93 @@ class Player(Entity):
         super().update()
 
     def _animate(self) -> None:
-        moving = any(
-            self.keylistener.key_pressed(self.controller.get_key(k))
-            for k in ("up", "down", "left", "right")
+        # Anime si intention de bouger (touches) OU si on a réellement bougé
+        moving = self._moving or any(
+            self._key_dir(d) for d in ("up", "down", "left", "right")
         )
-        if moving:
-            self.animation_timer += 1
-            if self.animation_timer >= self.animation_speed:
-                self.animation_timer = 0
-                frames = self.images.get(self.direction, self.images.get("down", [self.image]))
-                self.animation_index = (self.animation_index + 1) % len(frames)
+        dt = (self.screen.get_delta_time() or 16.0) / 1000.0
+
+        if moving and not self._dialogue_lock and not self.menu_option:
+            self.animation_timer += dt
+            if self.animation_timer >= self.animation_interval:
+                self.animation_timer = 0.0
+                frames = self.images.get(self.direction) or self.images.get(
+                    "down", [self.image]
+                )
+                self.animation_index = (self.animation_index + 1) % max(len(frames), 1)
         else:
             self.animation_index = 0
+            self.animation_timer = 0.0
 
-        frames = self.images.get(self.direction, self.images.get("down", [self.image]))
-        self.image = frames[self.animation_index % len(frames)]
+        frames = self.images.get(self.direction) or self.images.get("down", [self.image])
+        if frames:
+            self.image = frames[self.animation_index % len(frames)]
 
     def handle_input(self) -> None:
-        dx = dy = 0
+        self._moving = False
+
+        if self._dialogue_lock or self.menu_option:
+            return
+
         kl = self.keylistener
         c = self.controller
 
-        if kl.key_pressed(c.get_key("up")):
+        if kl.key_pressed(c.get_key("bike")):
+            self.switch_bike()
+            kl.remove_key(c.get_key("bike"))
+
+        running = kl.key_pressed(c.get_key("run")) and not self.on_bike
+        if running:
+            self.speed = 2
+            self.set_animation("run")
+        elif not self.on_bike:
+            self.speed = 1
+            self.set_animation("walk")
+
+        dx = dy = 0
+        if self._key_dir("up"):
             dy = -self.speed
             self.direction = "up"
-        elif kl.key_pressed(c.get_key("down")):
+        elif self._key_dir("down"):
             dy = self.speed
             self.direction = "down"
-        elif kl.key_pressed(c.get_key("left")):
+        elif self._key_dir("left"):
             dx = -self.speed
             self.direction = "left"
-        elif kl.key_pressed(c.get_key("right")):
+        elif self._key_dir("right"):
             dx = self.speed
             self.direction = "right"
 
         if not (dx or dy):
             return
 
-        test = self.hitbox.move(dx, dy)
+        self._moving = True  # intention : anime les pieds même si mur
 
-        # 1) SWITCHES : ne se déclenchent qu'en ENTRANT dessus (edge-triggered).
-        # Avant : `switch.check_collision(self.hitbox)` vérifiait aussi la position
-        # ACTUELLE, donc si le joueur est déjà sur un switch (ex: point d'apparition
-        # placé exactement dessus), CHAQUE touche déclenchait le switch et faisait
-        # un retour immédiat SANS jamais atteindre `self.position += ...` → plus
-        # aucun mouvement n'était possible, quelle que soit la touche pressée.
+        # 1) SWITCHES : uniquement si on ENTRE dans le switch
+        test_full = self.hitbox.move(dx, dy)
         for switch in self.switchs:
-            if switch.check_collision(test) and not switch.check_collision(self.hitbox):
+            if switch.check_collision(test_full) and not switch.check_collision(
+                self.hitbox
+            ):
                 self.pending_switch = switch
                 return
 
-        # 2) Collisions murs
-        if any(test.colliderect(col) for col in self.collisions):
-            return
+        # 2) Collision par axe (glisse le long des murs au lieu de tout bloquer)
+        moved = False
+        if dx:
+            test_x = self.hitbox.move(dx, 0)
+            if not any(test_x.colliderect(col) for col in self.collisions):
+                self.position.x += dx
+                moved = True
+        if dy:
+            # realigner hitbox après éventuel move X
+            self.rect.topleft = (int(self.position.x), int(self.position.y))
+            self.align_hitbox()
+            test_y = self.hitbox.move(0, dy)
+            if not any(test_y.colliderect(col) for col in self.collisions):
+                self.position.y += dy
+                moved = True
 
-        # 3) Mouvement OK (y compris pour sortir d'une case switch sur laquelle
-        # on se trouve déjà, ce qui était impossible avant ce correctif)
-        self.position += pygame.math.Vector2(dx, dy)
+        if moved:
+            self.rect.topleft = (int(self.position.x), int(self.position.y))
+            self.align_hitbox()

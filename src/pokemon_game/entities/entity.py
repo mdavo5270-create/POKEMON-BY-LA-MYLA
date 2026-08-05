@@ -7,10 +7,12 @@ class Entity(pygame.sprite.Sprite):
     def __init__(self, x: float, y: float) -> None:
         super().__init__()
         self.position = pygame.math.Vector2(x, y)
-        self.image = pygame.Surface((16, 24))
+        # Taille par défaut alignée sur les frames hero (25×32)
+        self.image = pygame.Surface((25, 32), pygame.SRCALPHA)
         self.image.fill((255, 0, 0))
         self.rect = self.image.get_rect(topleft=(x, y))
-        self.hitbox = self.rect.inflate(-4, -8)
+        # Hitbox plus étroite pour les collisions tile 16×16
+        self.hitbox = self.rect.inflate(-8, -12)
         self.speed = 1
         self.direction = "down"
         self.step = 16

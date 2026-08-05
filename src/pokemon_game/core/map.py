@@ -1,19 +1,25 @@
-"""Map management with Tiled + pyscroll."""
+"""Map management with Tiled + pyscroll — cache des maps + chargement robuste."""
 from __future__ import annotations
+
+from pathlib import Path
 
 import pygame
 import pyscroll
 import pytmx
 
 from pokemon_game.core.controller import Controller
+from pokemon_game.core.map_objects import parse_objects
 from pokemon_game.core.screen import Screen
 from pokemon_game.core.switch import Switch
 from pokemon_game.core.tool import Tool, asset_path
-from pokemon_game.core.map_objects import parse_objects
+from pokemon_game.systems.furniture import get_furniture_rects, draw_furniture
 
 
 class Map:
     """Map class to manage the map."""
+
+    # Cache des TiledMap déjà chargés (évite de relire le .tmx à chaque switch)
+    _tmx_cache: dict[str, pytmx.TiledMap] = {}
 
     def __init__(self, screen: Screen, controller: Controller) -> None:
         self.screen = screen
@@ -27,7 +33,8 @@ class Map:
         self.collisions: list[pygame.Rect] = []
         self.stairs: dict = {}
         self.dialogues: list = []
-        self.npcs: list = []
+        self.npcs: list = []          # données Tiled (dicts)
+        self.npc_entities: list = []  # sprites PNJ vivants
         self.triggers: list = []
         self.spawns: dict = {}
 
@@ -44,29 +51,57 @@ class Map:
         except Exception:
             self.image_change_map = pygame.Surface((215, 53), pygame.SRCALPHA)
 
+    def _load_tmx(self, map_name: str) -> pytmx.TiledMap:
+        """Charge un .tmx avec cache en mémoire."""
+        if map_name in Map._tmx_cache:
+            print(f"[MAP] Cache hit : {map_name}")
+            return Map._tmx_cache[map_name]
+
+        path = asset_path("map", f"{map_name}.tmx")
+        if not Path(path).exists():
+            raise FileNotFoundError(f"Map introuvable : {path}")
+
+        tmx = pytmx.load_pygame(path)
+        Map._tmx_cache[map_name] = tmx
+        print(f"[MAP] Chargé & mis en cache : {map_name} ({tmx.width}×{tmx.height})")
+        return tmx
+
     def switch_map(self, switch: Switch) -> None:
         if switch.name.lower() == "spawn":
-            # Convention Tiled : ce switch ne change pas de map, il replace juste
-            # le joueur au point d'apparition correspondant sur la map ACTUELLE.
             if self.player:
                 self.pose_player(switch)
                 self.player.step = 16
                 self.player.pending_switch = None
             return
 
-        path = asset_path("map", f"{switch.name}.tmx")
-        self.tmx_data = pytmx.load_pygame(path)
+        self.tmx_data = self._load_tmx(switch.name)
         map_data = pyscroll.data.TiledMapData(self.tmx_data)
-        self.map_layer = pyscroll.BufferedRenderer(map_data, self.screen.get_size())
+        # Taille = surface logique (pixel-art net)
+        view_size = self.screen.get_size()
+        self.map_layer = pyscroll.BufferedRenderer(
+            map_data,
+            view_size,
+            clamp_camera=True,
+        )
+        # Qualité : pas de flou sur les tiles
+        try:
+            self.map_layer.zoom = 1.0
+        except Exception:
+            pass
         self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer, default_layer=9)
         self.animation_change_map = 0
         self.animation_change_map_active = False
 
-        if switch.name.split("_")[0] == "map":
-            self.map_layer.zoom = 3
+        # Zoom adapté : outdoor un peu plus dézoomé, intérieur plus proche
+        is_outdoor = switch.name.startswith("map")
+        try:
+            # Zoom net : outdoor lisible, intérieur plus proche (style HGSS/moderne)
+            self.map_layer.zoom = 2.75 if is_outdoor else 3.5
+        except Exception:
+            pass
+        if is_outdoor:
             self.set_draw_change_map(switch.name)
-        else:
-            self.map_layer.zoom = 4
+        print(f"[MAP] Rendu {switch.name} view={view_size} outdoor={is_outdoor}")
 
         parsed = parse_objects(self.tmx_data)
         self.switchs = parsed.switches
@@ -77,34 +112,77 @@ class Map:
         self.triggers = parsed.triggers
         self.spawns = parsed.spawns
 
+        # Mobilier intérieur (collisions)
+        furn = get_furniture_rects(switch.name)
+        if furn:
+            self.collisions = list(self.collisions) + furn
+            print(f"[MAP] {len(furn)} meuble(s) ajoutés dans {switch.name}")
+
+        # Nettoyer anciens PNJ entities au changement de map
+        for ent in getattr(self, "npc_entities", []) or []:
+            if self.group and ent in self.group:
+                self.group.remove(ent)
+        self.npc_entities = []
+
         if self.player:
             self.pose_player(switch)
             self.player.align_hitbox()
             self.player.step = 16
-            self.player.pending_switch = None  # reset
+            self.player.pending_switch = None
             self.player.add_switchs(self.switchs)
             self.player.add_collisions(self.collisions)
             self.group.add(self.player)
-            if switch.name.split("_")[0] != "map":
-                if hasattr(self.player, "switch_bike"):
-                    self.player.switch_bike(force=False)  # pas de vélo en intérieur
+            if not is_outdoor and hasattr(self.player, "switch_bike"):
+                self.player.switch_bike(force=False)
 
         self.current_map = switch
+        self.map_name = switch.name
 
     def add_player(self, player) -> None:
         self.player = player
         if self.group:
             self.group.add(player)
 
+    def add_npc(self, npc) -> None:
+        """Ajoute une entité NPC (sprite) — PAS de collision solide (évite de bloquer le joueur)."""
+        if not hasattr(self, "npc_entities"):
+            self.npc_entities = []
+        self.npc_entities.append(npc)
+        if self.group:
+            self.group.add(npc)
+        # Pas d'ajout aux collisions : le joueur doit pouvoir marcher librement.
+        # L'interaction se fait via hitbox dans Game._try_interact.
+        print(f"[NPC] {getattr(npc, 'name', 'NPC')} @ ({npc.position.x:.0f}, {npc.position.y:.0f})")
+
     def update(self) -> None:
         if self.group and self.player:
-            self.group.update()
+            # Mettre à jour entités (joueur + PNJ)
+            self.group.update(self.screen)
+            # Caméra centrée joueur (clamp via BufferedRenderer)
             self.group.center(self.player.rect.center)
             display = self.screen.get_display()
             if display is not None:
                 self.group.draw(display)
+                # Mobilier
+                if self.map_name:
+                    try:
+                        font = pygame.font.SysFont(None, 14)
+                    except Exception:
+                        font = None
+                    draw_furniture(display, self.map_name, font)
+                if (self.map_name or "").startswith("map"):
+                    self._draw_ambient(display)
             if self.animation_change_map_active:
                 self.draw_change_map()
+
+    def _draw_ambient(self, display: pygame.Surface) -> None:
+        """Bandeau d'ambiance haut (ciel) sans cacher le gameplay."""
+        w = display.get_width()
+        band = pygame.Surface((w, 28), pygame.SRCALPHA)
+        for i in range(28):
+            a = int(18 * (1 - i / 28))
+            band.fill((120, 180, 255, a), (0, i, w, 1))
+        display.blit(band, (0, 0))
 
     def pose_player(self, switch: Switch) -> None:
         """Place le joueur sur le bon spawn."""
@@ -112,7 +190,7 @@ class Map:
             return
 
         port_str = str(switch.port)
-        # 1) Cherche un spawn qui contient le port
+
         for obj in self.tmx_data.objects:
             name = (obj.name or "").strip().lower()
             if name.startswith("spawn") and port_str in name.split():
@@ -120,14 +198,12 @@ class Map:
                 print(f"[SPAWN] {name} → ({obj.x}, {obj.y})")
                 return
 
-        # 2) Cherche dans le dict spawns parsé
         for key, pos in self.spawns.items():
             if port_str in key.split():
                 self.player.position = pos
                 print(f"[SPAWN] dict {key} → {pos}")
                 return
 
-        # 3) Fallback : premier spawn trouvé
         for obj in self.tmx_data.objects:
             name = (obj.name or "").strip().lower()
             if name.startswith("spawn"):
@@ -135,7 +211,11 @@ class Map:
                 print(f"[SPAWN] fallback {name} → ({obj.x}, {obj.y})")
                 return
 
-        print(f"[SPAWN] Aucun spawn trouvé pour port={switch.port}, position inchangée")
+        if self.tmx_data:
+            cx = (self.tmx_data.width * self.tmx_data.tilewidth) // 2
+            cy = (self.tmx_data.height * self.tmx_data.tileheight) // 2
+            self.player.position = pygame.math.Vector2(cx, cy)
+            print(f"[SPAWN] centre map → ({cx}, {cy})")
 
     def set_draw_change_map(self, map_name: str) -> None:
         if not self.animation_change_map_active:

@@ -54,18 +54,19 @@ class Pokemon:
         self.gender = "female" if random.randint(1, 100) <= self.femaleRate else "male"
         if self.femaleRate == -1:
             self.gender = "genderless"
-        self.ivs = {key: random.randint(1, 31) for key in self.get_base_stats().keys()}
+        self.ivs = {key: random.randint(0, 31) for key in self.get_base_stats().keys()}
         self.base_stats = self.get_base_stats()
 
         self.maxhp = self.update_stats("hp")
-        self.hp = self.update_stats("hp")
+        self.hp = self.maxhp
         self.atk = self.update_stats("atk")
         self.dfe = self.update_stats("dfe")
         self.ats = self.update_stats("ats")
         self.dfs = self.update_stats("dfs")
         self.spd = self.update_stats("spd")
 
-        self.shiny = "shiny" if random.randint(1, 10) == 1 else ""
+        # Fan-game rate: 1/512 (plus rare que 1/10, plus accessible que 1/4096)
+        self.shiny = "shiny" if random.randint(1, 512) == 1 else ""
         self.xp = 0
         self.points_ev = 0
 
@@ -78,9 +79,9 @@ class Pokemon:
 
     def get_types(self) -> list[str]:
         """Get the types of the Pokémon."""
-        type1 = self.forms[0]["type1"]
-        type2 = self.forms[0]["type2"]
-        if type2 == "__undef__":
+        type1 = self.forms[0].get("type1") or "normal"
+        type2 = self.forms[0].get("type2")
+        if not type2 or type2 == "__undef__":
             return [type1]
         return [type1, type2]
 
@@ -96,38 +97,53 @@ class Pokemon:
         }
 
     def update_stats(self, stat: str) -> int:
-        """Update one stat of the Pokémon from its base/IV/EV/level."""
+        """Update one stat of the Pokémon from its base/IV/EV/level.
+
+        Formule officielle (Gen 3+) :
+          HP  = floor((2*B + IV + floor(EV/4)) * L / 100) + L + 10
+          Autres = floor((floor((2*B + IV + floor(EV/4)) * L / 100) + 5) * Nature)
+        """
         base_stat = self.get_base_stats()[stat]
         iv = self.ivs[stat]
         ev = self.get_ev()[stat]
         level = self.level
         nature = 1.0
         if stat == "hp":
-            return math.floor(((2 * base_stat + iv + math.floor(ev / 4)) * level / 100) + level / 10)
-        return math.floor((((2 * base_stat + iv + math.floor(ev / 4)) * level / 100) + 5) * nature)
+            return math.floor(
+                ((2 * base_stat + iv + math.floor(ev / 4)) * level / 100) + level + 10
+            )
+        return math.floor(
+            (((2 * base_stat + iv + math.floor(ev / 4)) * level / 100) + 5) * nature
+        )
 
     def compute_xp_to_next_level(self):
-        """Get the experience required for the next level."""
-        if self.level == 100:
+        """Get the total experience required to reach the *next* level
+        (courbe officielle, total XP pour atteindre level+1)."""
+        if self.level >= 100:
             return 0
-        if self.experienceType == 1:
-            return math.floor((4 * (self.level ** 3)) / 5)
-        elif self.experienceType == 3:
-            return math.floor(((6 / 5) * (self.level ** 3)) - (15 * (self.level ** 2)) + (100 * self.level) - 140)
-        elif self.experienceType == 0:
-            return self.level ** 3
-        elif self.experienceType == 2:
-            return 5 * (self.level ** 3) / 4
-        elif self.experienceType == 4:
-            if self.level <= 50:
-                return math.floor((self.level ** 3) * (100 - self.level) / 50)
-            elif self.level <= 68:
-                return math.floor((self.level ** 3) * (150 - self.level) / 100)
-            elif self.level <= 98:
-                return math.floor((self.level ** 3) * math.floor((1911 - 10 * self.level) / 3) / 500)
-            elif self.level <= 100:
-                return math.floor((self.level ** 3) * (160 - self.level) / 100)
-        return 0
+        n = self.level + 1  # XP totale pour atteindre le niveau suivant
+        if self.experienceType == 1:  # Fast
+            return math.floor((4 * (n ** 3)) / 5)
+        elif self.experienceType == 3:  # Medium Slow
+            return math.floor(
+                ((6 / 5) * (n ** 3)) - (15 * (n ** 2)) + (100 * n) - 140
+            )
+        elif self.experienceType == 0:  # Medium Fast
+            return n ** 3
+        elif self.experienceType == 2:  # Slow
+            return math.floor(5 * (n ** 3) / 4)
+        elif self.experienceType == 4:  # Erratic
+            if n <= 50:
+                return math.floor((n ** 3) * (100 - n) / 50)
+            elif n <= 68:
+                return math.floor((n ** 3) * (150 - n) / 100)
+            elif n <= 98:
+                return math.floor(
+                    (n ** 3) * math.floor((1911 - 10 * n) / 3) / 500
+                )
+            else:
+                return math.floor((n ** 3) * (160 - n) / 100)
+        return n ** 3
 
     def set_moves(self) -> list[Move]:
         """Pick a random legal moveset for the current level."""
@@ -148,7 +164,10 @@ class Pokemon:
                 break
             chosen = random.choice(list_move)
             list_move.remove(chosen)
-            list_attack.append(Move.createMove(chosen["move"]))
+            try:
+                list_attack.append(Move.createMove(chosen["move"]))
+            except Exception as e:
+                print(f"[MOVE] Impossible de charger {chosen.get('move')}: {e}")
         return list_attack
 
     def get_ev(self) -> dict:

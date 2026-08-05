@@ -12,6 +12,8 @@ class Controller:
             "right": pygame.K_d,
             "action": pygame.K_e,
             "bike": pygame.K_b,
+            "run": pygame.K_LSHIFT,
+            "menu": pygame.K_ESCAPE,
             "quit": pygame.K_ESCAPE,
         }
 
