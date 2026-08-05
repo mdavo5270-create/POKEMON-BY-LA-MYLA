@@ -16,6 +16,7 @@ class Move:
     def __init__(self, move_data: dict) -> None:
         self.id = move_data.get("id")
         self.dbSymbol = move_data.get("dbSymbol")
+        self.name = move_data.get("name", self.dbSymbol)  # Fallback to dbSymbol if name missing
         self.klass = move_data.get("klass")
         self.mapUse = move_data.get("mapUse")
         self.type = move_data.get("type")
@@ -76,6 +77,7 @@ class Move:
         return {
             "id": self.id,
             "dbSymbol": self.dbSymbol,
+            "name": self.name,
             "klass": self.klass,
             "mapUse": self.mapUse,
             "type": self.type,

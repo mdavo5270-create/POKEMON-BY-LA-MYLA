@@ -16,7 +16,7 @@ TYPE_CHART: dict[str, dict[str, float]] = {
     "normal": {"rock": 0.5, "ghost": 0.0, "steel": 0.5},
     "fire": {
         "fire": 0.5, "water": 0.5, "grass": 2.0, "ice": 2.0,
-        "bug": 2.0, "rock": 0.5, "dragon": 0.5, "steel": 2.0,
+        "bug": 2.0, "rock": 0.5, "ground": 0.5, "dragon": 0.5, "steel": 2.0,
     },
     "water": {
         "fire": 2.0, "water": 0.5, "grass": 0.5, "ground": 2.0,
