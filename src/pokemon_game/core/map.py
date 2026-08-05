@@ -75,15 +75,33 @@ class Map:
 
         self.tmx_data = self._load_tmx(switch.name)
         map_data = pyscroll.data.TiledMapData(self.tmx_data)
-        self.map_layer = pyscroll.BufferedRenderer(map_data, self.screen.get_size())
+        # Taille = surface logique (pixel-art net)
+        view_size = self.screen.get_size()
+        self.map_layer = pyscroll.BufferedRenderer(
+            map_data,
+            view_size,
+            clamp_camera=True,
+            tall_sprites=1,
+        )
+        # Qualité : pas de flou sur les tiles
+        try:
+            self.map_layer.zoom = 1.0
+        except Exception:
+            pass
         self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer, default_layer=9)
         self.animation_change_map = 0
         self.animation_change_map_active = False
 
-        is_outdoor = switch.name.split("_")[0] == "map"
-        self.map_layer.zoom = 3 if is_outdoor else 4
+        # Zoom adapté : outdoor un peu plus dézoomé, intérieur plus proche
+        is_outdoor = switch.name.startswith("map")
+        try:
+            # Zoom net : outdoor lisible, intérieur plus proche (style HGSS/moderne)
+            self.map_layer.zoom = 2.75 if is_outdoor else 3.5
+        except Exception:
+            pass
         if is_outdoor:
             self.set_draw_change_map(switch.name)
+        print(f"[MAP] Rendu {switch.name} view={view_size} outdoor={is_outdoor}")
 
         parsed = parse_objects(self.tmx_data)
         self.switchs = parsed.switches
@@ -132,13 +150,27 @@ class Map:
 
     def update(self) -> None:
         if self.group and self.player:
-            self.group.update()
+            # Mettre à jour entités (joueur + PNJ)
+            self.group.update(self.screen)
+            # Caméra centrée joueur (clamp via BufferedRenderer)
             self.group.center(self.player.rect.center)
             display = self.screen.get_display()
             if display is not None:
                 self.group.draw(display)
+                # Léger dégradé ciel / ambiance haut de l'écran (outdoor)
+                if (self.map_name or "").startswith("map"):
+                    self._draw_ambient(display)
             if self.animation_change_map_active:
                 self.draw_change_map()
+
+    def _draw_ambient(self, display: pygame.Surface) -> None:
+        """Bandeau d'ambiance haut (ciel) sans cacher le gameplay."""
+        w = display.get_width()
+        band = pygame.Surface((w, 28), pygame.SRCALPHA)
+        for i in range(28):
+            a = int(18 * (1 - i / 28))
+            band.fill((120, 180, 255, a), (0, i, w, 1))
+        display.blit(band, (0, 0))
 
     def pose_player(self, switch: Switch) -> None:
         """Place le joueur sur le bon spawn."""
