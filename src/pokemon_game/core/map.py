@@ -12,6 +12,7 @@ from pokemon_game.core.map_objects import parse_objects
 from pokemon_game.core.screen import Screen
 from pokemon_game.core.switch import Switch
 from pokemon_game.core.tool import Tool, asset_path
+from pokemon_game.systems.furniture import get_furniture_rects, draw_furniture
 
 
 class Map:
@@ -112,6 +113,12 @@ class Map:
         self.triggers = parsed.triggers
         self.spawns = parsed.spawns
 
+        # Mobilier intérieur (collisions)
+        furn = get_furniture_rects(switch.name)
+        if furn:
+            self.collisions = list(self.collisions) + furn
+            print(f"[MAP] {len(furn)} meuble(s) ajoutés dans {switch.name}")
+
         # Nettoyer anciens PNJ entities au changement de map
         for ent in getattr(self, "npc_entities", []) or []:
             if self.group and ent in self.group:
@@ -157,7 +164,13 @@ class Map:
             display = self.screen.get_display()
             if display is not None:
                 self.group.draw(display)
-                # Léger dégradé ciel / ambiance haut de l'écran (outdoor)
+                # Mobilier
+                if self.map_name:
+                    try:
+                        font = pygame.font.SysFont(None, 14)
+                    except Exception:
+                        font = None
+                    draw_furniture(display, self.map_name, font)
                 if (self.map_name or "").startswith("map"):
                     self._draw_ambient(display)
             if self.animation_change_map_active:

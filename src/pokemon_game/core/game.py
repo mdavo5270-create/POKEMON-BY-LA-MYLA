@@ -23,27 +23,34 @@ from pokemon_game.systems.society import CITIZENS, SOCIETY_RULES, PLACES, BUILDI
 class Game:
     """Game class to manage the game."""
 
+    # Portes : zones larges + entrée aussi possible avec E (voir _try_enter_building)
+    DOORS: list[dict] = [
+        {"rect": pygame.Rect(500, 248, 40, 32), "target": "house_0", "port": 0, "label": "Maison d'Aria"},
+        {"rect": pygame.Rect(560, 248, 40, 32), "target": "house_1", "port": 0, "label": "Maison du Rival"},
+        {"rect": pygame.Rect(448, 248, 40, 32), "target": "labo_0", "port": 0, "label": "Laboratoire"},
+        {"rect": pygame.Rect(400, 248, 40, 32), "target": "pokecenter", "port": 0, "label": "Centre Pokémon"},
+        {"rect": pygame.Rect(352, 248, 40, 32), "target": "pokeshop", "port": 0, "label": "Boutique"},
+        {"rect": pygame.Rect(624, 288, 40, 32), "target": "inter_0", "port": 0, "label": "Maison du village"},
+        {"rect": pygame.Rect(720, 136, 40, 32), "target": "map_1", "port": 0, "label": "Route de l'Est"},
+    ]
+
     VIRTUAL_WARPS: dict[str, list[tuple]] = {
         "map_0": [
-            # Maison d'Aria (porte Tiled ~512,256) — zone large
-            (pygame.Rect(496, 240, 48, 40), "house_0", 0),
-            # Maison du Rival
-            (pygame.Rect(560, 240, 48, 40), "house_1", 0),
-            # Laboratoire
-            (pygame.Rect(448, 240, 48, 40), "labo_0", 0),
-            # Centre Pokémon
-            (pygame.Rect(400, 240, 48, 40), "pokecenter", 0),
-            # Boutique
-            (pygame.Rect(352, 240, 48, 40), "pokeshop", 0),
-            # Maison village (Hugo)
-            (pygame.Rect(624, 288, 48, 40), "inter_0", 0),
+            (pygame.Rect(500, 248, 40, 32), "house_0", 0),
+            (pygame.Rect(560, 248, 40, 32), "house_1", 0),
+            (pygame.Rect(448, 248, 40, 32), "labo_0", 0),
+            (pygame.Rect(400, 248, 40, 32), "pokecenter", 0),
+            (pygame.Rect(352, 248, 40, 32), "pokeshop", 0),
+            (pygame.Rect(624, 288, 40, 32), "inter_0", 0),
+            (pygame.Rect(720, 136, 40, 32), "map_1", 0),
         ],
-        "house_0": [(pygame.Rect(400, 400, 64, 40), "map_0", 0)],
-        "house_1": [(pygame.Rect(88, 200, 64, 40), "map_0", 0)],
-        "labo_0": [(pygame.Rect(104, 144, 64, 40), "map_0", 0)],
-        "pokecenter": [(pygame.Rect(96, 288, 64, 40), "map_0", 0)],
-        "pokeshop": [(pygame.Rect(48, 128, 64, 40), "map_0", 0)],
-        "inter_0": [(pygame.Rect(48, 128, 64, 40), "map_0", 0)],
+        "house_0": [(pygame.Rect(400, 400, 80, 48), "map_0", 0)],
+        "house_1": [(pygame.Rect(80, 200, 80, 40), "map_0", 0)],
+        "labo_0": [(pygame.Rect(100, 140, 80, 40), "map_0", 0)],
+        "pokecenter": [(pygame.Rect(90, 280, 80, 48), "map_0", 0)],
+        "pokeshop": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
+        "inter_0": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
+        "map_1": [(pygame.Rect(0, 100, 32, 64), "map_0", 0)],
     }
 
     def __init__(self) -> None:
@@ -130,17 +137,18 @@ class Game:
         map_name = getattr(self.map, "map_name", None) or "map_0"
 
         # Positions outdoor (map_0) + intérieur = propriétaire chez lui
+        # PNJ près de LEUR bâtiment (pas dispersés)
         layouts: dict[str, list[dict]] = {
             "map_0": [
-                {"key": "aria", "x": 520, "y": 300, "dir": "down"},
-                {"key": "rival", "x": 600, "y": 300, "dir": "left"},
-                {"key": "chen", "x": 480, "y": 300, "dir": "down"},
-                {"key": "joelle", "x": 430, "y": 300, "dir": "down"},
-                {"key": "marchand", "x": 380, "y": 300, "dir": "right"},
-                {"key": "hugo", "x": 650, "y": 320, "dir": "down"},
-                {"key": "lea", "x": 550, "y": 340, "dir": "left"},
-                {"key": "tom", "x": 200, "y": 400, "dir": "down"},
-                {"key": "garde", "x": 720, "y": 160, "dir": "down"},
+                {"key": "aria", "x": 520, "y": 280, "dir": "down", "radius": 48},
+                {"key": "rival", "x": 580, "y": 280, "dir": "down", "radius": 40},
+                {"key": "chen", "x": 460, "y": 280, "dir": "down", "radius": 40},
+                {"key": "joelle", "x": 410, "y": 280, "dir": "down", "radius": 36},
+                {"key": "marchand", "x": 360, "y": 280, "dir": "down", "radius": 36},
+                {"key": "hugo", "x": 640, "y": 310, "dir": "down", "radius": 40},
+                {"key": "lea", "x": 600, "y": 300, "dir": "left", "radius": 48},
+                {"key": "tom", "x": 220, "y": 400, "dir": "down", "radius": 56},
+                {"key": "garde", "x": 730, "y": 160, "dir": "down", "radius": 40},
             ],
             "house_0": [{"key": "aria", "x": 200, "y": 200, "dir": "down"}],
             "house_1": [
@@ -170,9 +178,13 @@ class Game:
                 building=cit.building,
                 use_ai=True,
                 can_walk=True,
+                wander_radius=float(spec.get("radius", 48)),
             )
-            if hasattr(npc, "set_work") and (cit.work_x or cit.work_y):
-                npc.set_work(cit.work_x, cit.work_y)
+            # Travail = devant sa porte (pas l'autre bout de la map)
+            wx = cit.work_x or spec["x"]
+            wy = cit.work_y or (spec["y"] + 20)
+            if hasattr(npc, "set_work"):
+                npc.set_work(wx, wy)
             if hasattr(npc, "set_collisions"):
                 npc.set_collisions(list(getattr(self.map, "collisions", []) or []))
             self.map.add_npc(npc)
@@ -300,8 +312,34 @@ class Game:
                 self.running = False
                 break
 
+
+    def _try_enter_building(self) -> bool:
+        """Devant une porte + E → entrer (plus fiable que marcher dessus)."""
+        if not self.player:
+            return False
+        map_name = getattr(self.map, "map_name", None) or "map_0"
+        hit = self.player.hitbox.inflate(20, 20)
+        if map_name == "map_0":
+            for door in self.DOORS:
+                if hit.colliderect(door["rect"]):
+                    self.player.pending_switch = Switch(
+                        "switch", door["target"], door["rect"], door["port"]
+                    )
+                    print(f"[PORTE] Entrée → {door['label']} ({door['target']})")
+                    return True
+        # Sortie intérieur
+        for rect, target, port in self.VIRTUAL_WARPS.get(map_name, []):
+            if hit.colliderect(rect) and target == "map_0":
+                self.player.pending_switch = Switch("switch", target, rect, port)
+                print(f"[PORTE] Sortie → {target}")
+                return True
+        return False
+
     def _try_interact(self) -> None:
         if not self.player or not self.map:
+            return
+        # E devant une porte = entrer / sortir
+        if self._try_enter_building():
             return
 
         hit = self.player.hitbox.inflate(24, 24)
