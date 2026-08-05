@@ -1,8 +1,7 @@
 """Système d'inventaire — objets, sac, utilisation, UI."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Callable
+from dataclasses import dataclass
 
 import pygame
 

@@ -18,7 +18,7 @@ from pokemon_game.systems.inventory import Inventory, BagUI
 from pokemon_game.systems.dialogue import Dialogue
 from pokemon_game.systems.option import Option
 from pokemon_game.systems.save import Save
-from pokemon_game.systems.society import CITIZENS, SOCIETY_RULES, PLACES, BUILDINGS
+from pokemon_game.systems.society import CITIZENS, PLACES, BUILDINGS
 
 
 class Game:
@@ -104,12 +104,14 @@ class Game:
                 print(f"[SAVE] Map {pending} non rechargée: {e}")
 
         self._spawn_citizens()
+        self._refresh_warp_state()
         # S'assurer que le joueur peut bouger
         if hasattr(self.player, "unlock"):
             self.player.unlock()
         else:
             self.player._dialogue_lock = False
             self.player.menu_option = False
+
 
     def _give_starter_if_needed(self) -> None:
         if getattr(self.player, "team", None) and len(self.player.team) > 0:
@@ -208,8 +210,24 @@ class Game:
                 f"{b.label} ({b.owner})" for b in BUILDINGS.values() if b.role != "route"
             ))
 
+    def _refresh_warp_state(self) -> None:
+        """Après un changement de map (ou au démarrage) : neutraliser la porte
+        sur laquelle le joueur apparaît, sinon il est renvoyé en boucle."""
+        self._prev_player_hitbox = None
+        self._warp_stand_frames = 0
+        self._warp_ignore = []
+        if not self.player:
+            return
+        map_name = getattr(self.map, "map_name", None) or "map_0"
+        self.player.rect.topleft = (int(self.player.position.x), int(self.player.position.y))
+        self.player.align_hitbox()
+        hit = self.player.hitbox
+        for rect, _target, _port in self.VIRTUAL_WARPS.get(map_name, []):
+            if hit.colliderect(rect):
+                self._warp_ignore.append(rect)
+
     def _check_virtual_warps(self) -> None:
-        """Warp si le joueur entre dans la zone porte (edge) OU reste 12 frames dedans."""
+        """Warp si le joueur entre dans la zone porte (edge) OU reste 20 frames dedans."""
         if self.switch_cooldown > 0 or not self.player:
             return
         if getattr(self.player, "_dialogue_lock", False) or getattr(
@@ -225,9 +243,16 @@ class Game:
         hit = self.player.hitbox
         prev = getattr(self, "_prev_player_hitbox", None)
         self._prev_player_hitbox = hit.copy()
+        ignored = getattr(self, "_warp_ignore", None)
+        if ignored is None:
+            ignored = self._warp_ignore = []
+        # Une porte neutralisée redevient active dès que le joueur en sort
+        self._warp_ignore = [r for r in ignored if hit.colliderect(r)]
         inside = None
         for rect, target, port in warps:
             now_in = hit.colliderect(rect)
+            if now_in and rect in self._warp_ignore:
+                continue
             was_in = prev.colliderect(rect) if prev is not None else False
             if now_in and not was_in:
                 self.player.pending_switch = Switch("switch", target, rect, port)
@@ -246,6 +271,7 @@ class Game:
                 self._warp_stand_frames = 0
         else:
             self._warp_stand_frames = 0
+
 
     def run(self) -> None:
         while self.running:
@@ -299,6 +325,8 @@ class Game:
                     self.switch_cooldown = 45
                     print(f"[MAP] Passage vers {switch.name} (port {switch.port})")
                     self._spawn_citizens()
+                    self._refresh_warp_state()
+
                 except Exception as e:
                     print(f"[ERREUR] Impossible de charger {switch.name}: {e}")
                     self.switch_cooldown = 45
@@ -388,11 +416,12 @@ class Game:
     def _try_interact(self) -> None:
         if not self.player or not self.map:
             return
-        # E devant une porte = entrer / sortir
-        if self._try_enter_building():
-            return
+        # Sync rect depuis position (évite hitbox décalée)
+        self.player.rect.topleft = (int(self.player.position.x), int(self.player.position.y))
+        self.player.align_hitbox()
 
         hit = self.player.hitbox.inflate(24, 24)
+
         direction = getattr(self.player, "direction", "down")
         offset = {
             "up": (0, -20),
@@ -521,7 +550,14 @@ class Game:
                 print(f"[INTERACT] Lieu → {place.label}")
                 return
 
+        # En dernier : E devant une porte = entrer / sortir
+        # (après les PNJ, sinon impossible de parler aux habitants postés
+        #  devant les bâtiments)
+        if self._try_enter_building():
+            return
+
         print("[INTERACT] Rien à proximité")
+
 
     def dialogue_controller(self) -> None:
         if getattr(self.dialogue, "active", False):

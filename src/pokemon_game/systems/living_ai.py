@@ -89,7 +89,7 @@ class LivingBrain:
         if lang == "fr":
             greetings = [
                 f"Encore toi. Visite n°{v}. J'espère que tu as progressé.",
-                f"Te revoilà. Je me souviens de ta dernière visite.",
+                "Te revoilà. Je me souviens de ta dernière visite.",
                 f"Ah. Le dresseur au regard déterminé. Visite {v}.",
             ]
             if v == 1:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pygame
 
-from pokemon_game.core.tool import ASSETS, Tool, asset_path
+from pokemon_game.core.tool import Tool, asset_path
 
 # Layouts prioritaires : les sprites hero_* sont en 100×128 → 4×4 frames de 25×32
 _LAYOUTS = [
