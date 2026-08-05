@@ -89,6 +89,8 @@ class Game:
             self.player.inventory, self.player,
         )
         self.battle: Battle | None = None
+        self.wild_cooldown: int = 0
+        self._pending_battle: str | None = None
 
         self._give_starter_if_needed()
         self._start_map()
@@ -268,6 +270,7 @@ class Game:
                 continue
 
             self._check_virtual_warps()
+            self._check_wild_encounter()
 
             if (
                 getattr(self.player, "pending_switch", None)
@@ -424,7 +427,6 @@ class Game:
                             self.dialogue.load_pages([
                                 {"name": ent.name, "text": "Toi ! On se bat, maintenant !"},
                             ])
-                            # Marquer un combat en attente après le dialogue
                             self._pending_battle = "rival"
                             print("[INTERACT] Rival → combat imminent")
                             return
@@ -561,6 +563,7 @@ class Game:
                 ])
             print(f"[BATTLE] Fin — {result}")
 
+        inv = getattr(self.player, "inventory", None)
         self.player._dialogue_lock = True
         self.battle = Battle(
             self.screen,
@@ -570,37 +573,88 @@ class Game:
             enemy,
             enemy_name="Rival",
             can_run=True,
+            is_wild=False,
+            team=team,
+            inventory=inv,
             on_end=_on_end,
         )
         print("[BATTLE] Combat vs Rival démarré !")
 
-    def start_wild_battle(self, species: str = "rattata", level: int = 3) -> None:
-        """Combat sauvage (pour tests / herbe plus tard)."""
+    def _check_wild_encounter(self) -> None:
+        """Rencontres sauvages sur map_1 (Route Est)."""
+        if self.battle and self.battle.active:
+            return
+        if getattr(self.player, "menu_option", False):
+            return
+        if getattr(self.player, "_dialogue_lock", False):
+            return
+        if self.wild_cooldown > 0:
+            self.wild_cooldown -= 1
+            return
+        map_name = getattr(self.map, "map_name", "") or ""
+        if map_name != "map_1":
+            return
+        # Seulement si le joueur bouge
+        moving = getattr(self.player, "is_moving", False) or getattr(self.player, "direction", None)
+        # chance ~8% par frame quand on marche — trop haut. Utiliser un timer via step
+        # Détection simple : si position a changé
+        pos = (int(self.player.position.x), int(self.player.position.y))
+        last = getattr(self, "_last_wild_pos", None)
+        if last == pos:
+            return
+        self._last_wild_pos = pos
+        if random.random() > 0.12:
+            return
+        species_pool = ["caterpie", "ekans", "diglett", "bellsprout", "abra", "cubone"]
+        species = random.choice(species_pool)
+        team = getattr(self.player, "team", None) or []
+        level = 3
+        if team:
+            level = max(2, min(8, team[0].level - 1 + random.randint(0, 2)))
+        self.wild_cooldown = 180  # ~3s à 60fps
+        print(f"[WILD] Rencontre {species} N.{level}")
+        self.start_wild_battle(species, level)
+
+    def start_wild_battle(self, species: str = "caterpie", level: int = 3) -> None:
+        """Combat sauvage."""
         team = getattr(self.player, "team", None) or []
         if not team:
             return
-        player_mon = team[0]
+        # Premier Pokémon vivant
+        player_mon = None
+        for m in team:
+            if m.hp > 0:
+                player_mon = m
+                break
+        if not player_mon:
+            return
         try:
             enemy = Pokemon.create_pokemon(species, level=level)
         except Exception:
             try:
-                enemy = Pokemon.create_pokemon("pidgey", level=level)
+                enemy = Pokemon.create_pokemon("caterpie", level=level)
             except Exception as e:
                 print(f"[BATTLE] Wild fail: {e}")
                 return
 
         def _on_end(result: str) -> None:
+            b = self.battle
+            if b and getattr(b, "team", None):
+                self.player.team = list(b.team)
             self.battle = None
             self.player._dialogue_lock = False
             self.player.menu_option = False
             if result == "lose":
                 self._heal_team()
+            print(f"[BATTLE] Fin wild — {result}")
 
+        inv = getattr(self.player, "inventory", None)
         self.player._dialogue_lock = True
         self.battle = Battle(
             self.screen, self.controller, self.keylistener,
             player_mon, enemy, enemy_name="Pokémon sauvage",
-            can_run=True, on_end=_on_end,
+            can_run=True, is_wild=True, team=team, inventory=inv,
+            on_end=_on_end,
         )
 
     def handle_input(self) -> None:
