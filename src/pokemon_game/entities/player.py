@@ -50,6 +50,7 @@ class Player(Entity):
         self.pending_switch: Switch | None = None
         self._dialogue_lock = False
         self.team: list = []
+        self.inventory = None  # set by Game (Inventory)
         self._moving = False  # pour l'anim même si collision bloque un axe
 
         self._load_sprites()

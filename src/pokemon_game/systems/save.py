@@ -40,6 +40,12 @@ class Save:
                         ]
                     except Exception as e:
                         print(f"[SAVE] Team non chargée: {e}")
+                if "inventory" in data:
+                    try:
+                        from pokemon_game.systems.inventory import Inventory
+                        self.player.inventory = Inventory.from_dict(data["inventory"])
+                    except Exception as e:
+                        print(f"[SAVE] Inventaire non chargé: {e}")
             # Map (rechargée après add_player dans Game)
             if "map" in data and self.map:
                 setattr(self, "_pending_map", data["map"])
@@ -55,9 +61,14 @@ class Save:
                     p.to_dict() if hasattr(p, "to_dict") else p
                     for p in self.player.team
                 ]
+            inv_data = {}
+            if self.player and getattr(self.player, "inventory", None):
+                inv = self.player.inventory
+                inv_data = inv.to_dict() if hasattr(inv, "to_dict") else {}
             data = {
                 "x": float(getattr(self.player.position, "x", 0)),
                 "y": float(getattr(self.player.position, "y", 0)),
+                "inventory": inv_data,
                 "map": (
                     getattr(self.map.current_map, "name", "map_0")
                     if self.map and self.map.current_map

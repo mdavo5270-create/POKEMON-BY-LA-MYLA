@@ -14,6 +14,7 @@ from pokemon_game.entities.npc import NPC
 from pokemon_game.entities.player import Player
 from pokemon_game.entities.pokemon import Pokemon
 from pokemon_game.systems.battle import Battle
+from pokemon_game.systems.inventory import Inventory, BagUI
 from pokemon_game.systems.dialogue import Dialogue
 from pokemon_game.systems.option import Option
 from pokemon_game.systems.save import Save
@@ -79,6 +80,14 @@ class Game:
 
         self.switch_cooldown: int = 0
         self.interact_cooldown: int = 0
+        # Inventaire
+        if not getattr(self.player, "inventory", None):
+            self.player.inventory = Inventory.starter()
+            print("[INV] Sac de depart pret")
+        self.bag = BagUI(
+            self.screen, self.controller, self.keylistener,
+            self.player.inventory, self.player,
+        )
         self.battle: Battle | None = None
 
         self._give_starter_if_needed()
@@ -239,6 +248,25 @@ class Game:
                     break
                 continue
 
+            # ── Sac ──
+            if getattr(self.player, "_open_bag", False):
+                self.player._open_bag = False
+                self.bag.inventory = self.player.inventory
+                self.bag.open_bag()
+            if self.bag and self.bag.open:
+                if not getattr(self, "_no_map", False):
+                    try:
+                        self.map.update()
+                    except Exception:
+                        pass
+                self.bag.update()
+                try:
+                    self.screen.update()
+                except pygame.error:
+                    self.running = False
+                    break
+                continue
+
             self._check_virtual_warps()
 
             if (
@@ -368,6 +396,27 @@ class Game:
                         ])
                         print("[SOIN] Équipe soignée au Centre Pokémon")
                         return
+                    # Boutique
+                    if getattr(ent, "personality", "") == "commercial_honnête":
+                        inv = getattr(self.player, "inventory", None)
+                        if inv:
+                            bought = []
+                            if inv.buy("potion", 1):
+                                bought.append("Potion")
+                            if inv.buy("pokeball", 1):
+                                bought.append("Poke Ball")
+                            if bought:
+                                self.dialogue.load_pages([
+                                    {"name": ent.name, "text": f"Voici : {', '.join(bought)} !"},
+                                    {"name": ent.name, "text": f"Il te reste {inv.money} pieces. Reviens !"},
+                                ])
+                            else:
+                                self.dialogue.load_pages([
+                                    {"name": ent.name, "text": f"Pas assez d'argent ({inv.money})."},
+                                    {"name": ent.name, "text": "Potion=200, Poke Ball=200."},
+                                ])
+                            print("[SHOP] Achat")
+                            return
                     # Rival : dialogue puis combat
                     if getattr(ent, "personality", "") == "compétitif":
                         team = getattr(self.player, "team", None) or []

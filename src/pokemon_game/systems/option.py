@@ -13,8 +13,8 @@ from pathlib import Path
 
 class Option:
     LABELS = {
-        "fr": ["Continuer", "Sauvegarder", "Règles de société", "Quitter"],
-        "en": ["Resume", "Save", "Society rules", "Quit"],
+        "fr": ["Continuer", "Sac", "Sauvegarder", "Règles de société", "Quitter"],
+        "en": ["Resume", "Bag", "Save", "Society rules", "Quit"],
     }
 
     def __init__(self, screen, controller, map_obj, lang, save, keylistener, dialogue) -> None:
@@ -46,7 +46,7 @@ class Option:
             self._font_title = pygame.font.SysFont(None, 40)
 
         # Panel semi-transparent
-        self._panel = pygame.Surface((360, 320), pygame.SRCALPHA)
+        self._panel = pygame.Surface((360, 360), pygame.SRCALPHA)
         self._panel.fill((15, 20, 40, 230))
         pygame.draw.rect(self._panel, (255, 255, 255), self._panel.get_rect(), 3)
 
@@ -88,6 +88,11 @@ class Option:
         choice = labels[self.selected]
         if choice in ("Continuer", "Resume"):
             self.close()
+        elif choice in ("Sac", "Bag"):
+            self.close()
+            # Game ouvrira le bag via flag
+            if self.player is not None:
+                setattr(self.player, "_open_bag", True)
         elif choice in ("Sauvegarder", "Save"):
             if self.save:
                 self.save.save()
