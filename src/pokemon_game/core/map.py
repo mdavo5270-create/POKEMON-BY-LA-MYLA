@@ -82,7 +82,6 @@ class Map:
             map_data,
             view_size,
             clamp_camera=True,
-            tall_sprites=1,
         )
         # Qualité : pas de flou sur les tiles
         try:

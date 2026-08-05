@@ -15,13 +15,19 @@ class Screen:
     """
 
     def __init__(self) -> None:
-        flags = pygame.DOUBLEBUF | pygame.RESIZABLE
-        try:
-            flags |= pygame.SCALED
-        except Exception:
-            pass
-
-        self.display = pygame.display.set_mode((1280, 720), flags)
+        self.display = None
+        for flags in (
+            pygame.DOUBLEBUF | pygame.RESIZABLE,
+            pygame.RESIZABLE,
+            0,
+        ):
+            try:
+                self.display = pygame.display.set_mode((1280, 720), flags)
+                break
+            except pygame.error:
+                continue
+        if self.display is None:
+            self.display = pygame.display.set_mode((1280, 720))
         pygame.display.set_caption("POKEMON BY LA MYLA")
         try:
             pygame.display.set_icon(

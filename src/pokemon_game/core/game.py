@@ -26,24 +26,25 @@ class Game:
 
     # Portes : zones larges + entrée aussi possible avec E (voir _try_enter_building)
     DOORS: list[dict] = [
-        {"rect": pygame.Rect(500, 248, 40, 32), "target": "house_0", "port": 0, "label": "Maison d'Aria"},
-        {"rect": pygame.Rect(560, 248, 40, 32), "target": "house_1", "port": 0, "label": "Maison du Rival"},
-        {"rect": pygame.Rect(448, 248, 40, 32), "target": "labo_0", "port": 0, "label": "Laboratoire"},
-        {"rect": pygame.Rect(400, 248, 40, 32), "target": "pokecenter", "port": 0, "label": "Centre Pokémon"},
-        {"rect": pygame.Rect(352, 248, 40, 32), "target": "pokeshop", "port": 0, "label": "Boutique"},
-        {"rect": pygame.Rect(624, 288, 40, 32), "target": "inter_0", "port": 0, "label": "Maison du village"},
-        {"rect": pygame.Rect(720, 136, 40, 32), "target": "map_1", "port": 0, "label": "Route de l'Est"},
+        # Zones calées sur switches Tiled + pieds du sprite (hitbox midbottom)
+        {"rect": pygame.Rect(496, 248, 48, 56), "target": "house_0", "port": 0, "label": "Maison d'Aria"},
+        {"rect": pygame.Rect(544, 248, 56, 56), "target": "house_1", "port": 0, "label": "Maison du Rival"},
+        {"rect": pygame.Rect(432, 248, 56, 56), "target": "labo_0", "port": 0, "label": "Laboratoire"},
+        {"rect": pygame.Rect(384, 248, 48, 56), "target": "pokecenter", "port": 0, "label": "Centre Pokémon"},
+        {"rect": pygame.Rect(336, 248, 48, 56), "target": "pokeshop", "port": 0, "label": "Boutique"},
+        {"rect": pygame.Rect(608, 280, 56, 56), "target": "inter_0", "port": 0, "label": "Maison du village"},
+        {"rect": pygame.Rect(720, 128, 48, 56), "target": "map_1", "port": 0, "label": "Route de l'Est"},
     ]
 
     VIRTUAL_WARPS: dict[str, list[tuple]] = {
         "map_0": [
-            (pygame.Rect(500, 248, 40, 32), "house_0", 0),
-            (pygame.Rect(560, 248, 40, 32), "house_1", 0),
-            (pygame.Rect(448, 248, 40, 32), "labo_0", 0),
-            (pygame.Rect(400, 248, 40, 32), "pokecenter", 0),
-            (pygame.Rect(352, 248, 40, 32), "pokeshop", 0),
-            (pygame.Rect(624, 288, 40, 32), "inter_0", 0),
-            (pygame.Rect(720, 136, 40, 32), "map_1", 0),
+            (pygame.Rect(496, 248, 48, 56), "house_0", 0),
+            (pygame.Rect(544, 248, 56, 56), "house_1", 0),
+            (pygame.Rect(432, 248, 56, 56), "labo_0", 0),
+            (pygame.Rect(384, 248, 48, 56), "pokecenter", 0),
+            (pygame.Rect(336, 248, 48, 56), "pokeshop", 0),
+            (pygame.Rect(608, 280, 56, 56), "inter_0", 0),
+            (pygame.Rect(720, 128, 48, 56), "map_1", 0),
         ],
         "house_0": [(pygame.Rect(400, 400, 80, 48), "map_0", 0)],
         "house_1": [(pygame.Rect(80, 200, 80, 40), "map_0", 0)],
@@ -51,7 +52,7 @@ class Game:
         "pokecenter": [(pygame.Rect(90, 280, 80, 48), "map_0", 0)],
         "pokeshop": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
         "inter_0": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
-        "map_1": [(pygame.Rect(0, 100, 32, 64), "map_0", 0)],
+        "map_1": [(pygame.Rect(0, 100, 48, 80), "map_0", 0)],
     }
 
     def __init__(self) -> None:
@@ -208,28 +209,43 @@ class Game:
             ))
 
     def _check_virtual_warps(self) -> None:
-        """Warp uniquement à l'ENTRÉE dans la zone (comme les switches Tiled)."""
+        """Warp si le joueur entre dans la zone porte (edge) OU reste 12 frames dedans."""
         if self.switch_cooldown > 0 or not self.player:
             return
         if getattr(self.player, "_dialogue_lock", False) or getattr(
             self.player, "menu_option", False
         ):
             return
+        if getattr(self.player, "pending_switch", None):
+            return
         map_name = getattr(self.map, "map_name", None) or "map_0"
         warps = self.VIRTUAL_WARPS.get(map_name, [])
+        self.player.rect.topleft = (int(self.player.position.x), int(self.player.position.y))
+        self.player.align_hitbox()
         hit = self.player.hitbox
-        # Position précédente approximative (avant ce frame) pour détecter l'entrée
         prev = getattr(self, "_prev_player_hitbox", None)
         self._prev_player_hitbox = hit.copy()
+        inside = None
         for rect, target, port in warps:
             now_in = hit.colliderect(rect)
             was_in = prev.colliderect(rect) if prev is not None else False
             if now_in and not was_in:
-                if getattr(self.player, "pending_switch", None):
-                    return
                 self.player.pending_switch = Switch("switch", target, rect, port)
                 print(f"[WARP] {map_name} → {target} (port {port})")
+                self._warp_stand_frames = 0
                 return
+            if now_in:
+                inside = (rect, target, port)
+        # Rester sur la porte (si edge a raté)
+        if inside:
+            self._warp_stand_frames = getattr(self, "_warp_stand_frames", 0) + 1
+            if self._warp_stand_frames >= 20:
+                rect, target, port = inside
+                self.player.pending_switch = Switch("switch", target, rect, port)
+                print(f"[WARP] stand → {target}")
+                self._warp_stand_frames = 0
+        else:
+            self._warp_stand_frames = 0
 
     def run(self) -> None:
         while self.running:
@@ -349,7 +365,10 @@ class Game:
         if not self.player:
             return False
         map_name = getattr(self.map, "map_name", None) or "map_0"
-        hit = self.player.hitbox.inflate(20, 20)
+        # Sync rect depuis position (évite hitbox décalée)
+        self.player.rect.topleft = (int(self.player.position.x), int(self.player.position.y))
+        self.player.align_hitbox()
+        hit = self.player.hitbox.inflate(24, 24)
         if map_name == "map_0":
             for door in self.DOORS:
                 if hit.colliderect(door["rect"]):
