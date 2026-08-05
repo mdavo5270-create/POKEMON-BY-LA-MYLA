@@ -19,16 +19,26 @@ class Save:
         self.path = _SAVES_DIR / f"{slot}.json"
 
     def load(self) -> None:
-        if not self.path.exists():
-            return
+        """Load slot using centralized save_io; applies to player, inventory, team and pending map."""
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            from pokemon_game.systems.save_io import load_slot
+
+            blob = load_slot(self.slot)
+            if not blob:
+                return
+            data = blob
             if self.player:
                 if "x" in data and "y" in data:
-                    self.player.position.x = float(data["x"])
-                    self.player.position.y = float(data["y"])
+                    try:
+                        self.player.position.x = float(data["x"])
+                        self.player.position.y = float(data["y"])
+                    except Exception:
+                        pass
                 if data.get("on_bike") and hasattr(self.player, "switch_bike"):
-                    self.player.switch_bike(force=True)
+                    try:
+                        self.player.switch_bike(force=True)
+                    except Exception:
+                        pass
                 # Team (si présente)
                 if "team" in data and isinstance(data["team"], list):
                     try:
@@ -42,6 +52,7 @@ class Save:
                 if "inventory" in data:
                     try:
                         from pokemon_game.systems.inventory import Inventory
+
                         self.player.inventory = Inventory.from_dict(data["inventory"])
                     except Exception as e:
                         print(f"[SAVE] Inventaire non chargé: {e}")
@@ -52,34 +63,21 @@ class Save:
             print(f"[SAVE] Load échoué: {e}")
 
     def save(self) -> None:
+        """Save current slot using centralized save_io (atomic, backup, schema).
+
+        Keeps previous dialogue feedback behaviour.
+        """
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            team_data = []
-            if self.player and getattr(self.player, "team", None):
-                team_data = [
-                    p.to_dict() if hasattr(p, "to_dict") else p
-                    for p in self.player.team
-                ]
-            inv_data = {}
-            if self.player and getattr(self.player, "inventory", None):
-                inv = self.player.inventory
-                inv_data = inv.to_dict() if hasattr(inv, "to_dict") else {}
-            data = {
-                "x": float(getattr(self.player.position, "x", 0)),
-                "y": float(getattr(self.player.position, "y", 0)),
-                "inventory": inv_data,
-                "map": (
-                    getattr(self.map.current_map, "name", "map_0")
-                    if self.map and self.map.current_map
-                    else getattr(self.map, "map_name", "map_0") or "map_0"
-                ),
-                "on_bike": bool(getattr(self.player, "on_bike", False)),
-                "team": team_data,
-            }
-            self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            print(f"[SAVE] Écrit → {self.path}")
+            from pokemon_game.systems.save_io import save_slot
+
+            # Delegate serialization and IO to save_io
+            save_slot(self.slot, self.player, self.map, encrypt=False, password=None)
+            print(f"[SAVE] Écrit → {getattr(self, 'path', self.slot)}")
             # Feedback dialogue si dispo
             if self.dialogue and not self.dialogue.active:
-                self.dialogue.load_data(100, 0)
+                try:
+                    self.dialogue.load_data(100, 0)
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[SAVE] Échec écriture: {e}")
