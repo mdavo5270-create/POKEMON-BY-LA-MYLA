@@ -62,6 +62,8 @@ class LivingBrain:
             pages = self._tom(lang)
         elif self.personality == "strict":
             pages = self._garde(lang)
+        elif self.personality == "chaleureuse":
+            pages = self._maya(team_names, lang)
         else:
             pages = [
                 {
@@ -246,5 +248,22 @@ class LivingBrain:
             {"name": n, "text": "Halte. Garde Milo, Route de l'Est."},
             {"name": n, "text": "La route est libre, mais les Pokémon sauvages ne font pas de cadeau."},
             {"name": n, "text": "Soigne ton équipe au Centre avant d'aller plus loin."},
+        ]
+
+    def _maya(self, team: list[str], lang: str) -> list[dict]:
+        n = self.name
+        if lang != "fr":
+            return [{"name": n, "text": "Welcome to my little pension, traveler."}]
+        t = ", ".join(team) if team else "personne"
+        if self.memory.visits <= 1:
+            return [
+                {"name": n, "text": "Oh, un visiteur ! Ma pension est loin du village, peu de monde passe par ici."},
+                {"name": n, "text": f"Ton équipe ({t}) a l'air épuisée par la route. Repose-toi un instant."},
+                {"name": n, "text": "Reviens quand tu veux, la porte n'est jamais fermée."},
+            ]
+        return [
+            {"name": n, "text": f"Encore toi ! Visite numéro {self.memory.visits}."},
+            {"name": n, "text": "Les Pokémon qui vivent ici adorent quand un dresseur passe les voir."},
+            {"name": n, "text": "Prends soin des tiens comme je prends soin des miens."},
         ]
 

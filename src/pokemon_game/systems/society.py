@@ -80,6 +80,11 @@ BUILDINGS: dict[str, Building] = {
         description="Chemin hors du village.",
         door_x=736, door_y=144,
     ),
+    "house_2": Building(
+        "house_2", "Pension de Maya", "Éleveuse Maya", "habitation",
+        description="Une pension isolée où les Pokémon fatigués se reposent.",
+        door_x=1016, door_y=456,
+    ),
 }
 
 CITIZENS: dict[str, Citizen] = {
@@ -118,6 +123,10 @@ CITIZENS: dict[str, Citizen] = {
     "garde": Citizen(
         "Garde Milo", "map_1", "garde", "strict",
         work_x=720, work_y=160,
+    ),
+    "maya": Citizen(
+        "Éleveuse Maya", "house_2", "éleveuse", "chaleureuse",
+        work_x=1016, work_y=490,
     ),
 }
 

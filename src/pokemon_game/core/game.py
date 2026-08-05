@@ -34,6 +34,7 @@ class Game:
         {"rect": pygame.Rect(336, 248, 48, 56), "target": "pokeshop", "port": 0, "label": "Boutique"},
         {"rect": pygame.Rect(608, 280, 56, 56), "target": "inter_0", "port": 0, "label": "Maison du village"},
         {"rect": pygame.Rect(720, 128, 48, 56), "target": "map_1", "port": 0, "label": "Route de l'Est"},
+        {"rect": pygame.Rect(1000, 440, 48, 40), "target": "house_2", "port": 0, "label": "Pension de Maya"},
     ]
 
     VIRTUAL_WARPS: dict[str, list[tuple]] = {
@@ -45,6 +46,7 @@ class Game:
             (pygame.Rect(336, 248, 48, 56), "pokeshop", 0),
             (pygame.Rect(608, 280, 56, 56), "inter_0", 0),
             (pygame.Rect(720, 128, 48, 56), "map_1", 0),
+            (pygame.Rect(1000, 440, 48, 40), "house_2", 0),
         ],
         "house_0": [(pygame.Rect(400, 400, 80, 48), "map_0", 0)],
         "house_1": [(pygame.Rect(80, 200, 80, 40), "map_0", 0)],
@@ -53,6 +55,7 @@ class Game:
         "pokeshop": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
         "inter_0": [(pygame.Rect(40, 120, 80, 40), "map_0", 0)],
         "map_1": [(pygame.Rect(0, 100, 48, 80), "map_0", 0)],
+        "house_2": [(pygame.Rect(80, 200, 80, 40), "map_0", 2)],
     }
 
     def __init__(self) -> None:
@@ -163,6 +166,7 @@ class Game:
                 {"key": "lea", "x": 600, "y": 300, "dir": "left", "radius": 48},
                 {"key": "tom", "x": 220, "y": 400, "dir": "down", "radius": 56},
                 {"key": "garde", "x": 730, "y": 160, "dir": "down", "radius": 40},
+                {"key": "maya", "x": 1016, "y": 490, "dir": "down", "radius": 32},
             ],
             "house_0": [{"key": "aria", "x": 200, "y": 200, "dir": "down"}],
             "house_1": [
@@ -174,6 +178,7 @@ class Game:
             "pokeshop": [{"key": "marchand", "x": 80, "y": 70, "dir": "down"}],
             "inter_0": [{"key": "hugo", "x": 80, "y": 80, "dir": "down"}],
             "map_1": [{"key": "garde", "x": 40, "y": 100, "dir": "down"}],
+            "house_2": [{"key": "maya", "x": 120, "y": 110, "dir": "down"}],
         }
 
         for spec in layouts.get(map_name, []):
