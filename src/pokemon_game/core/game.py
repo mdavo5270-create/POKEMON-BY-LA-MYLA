@@ -13,6 +13,7 @@ from pokemon_game.core.switch import Switch
 from pokemon_game.entities.npc import NPC
 from pokemon_game.entities.player import Player
 from pokemon_game.entities.pokemon import Pokemon
+from pokemon_game.systems.battle import Battle
 from pokemon_game.systems.dialogue import Dialogue
 from pokemon_game.systems.option import Option
 from pokemon_game.systems.save import Save
@@ -71,6 +72,7 @@ class Game:
 
         self.switch_cooldown: int = 0
         self.interact_cooldown: int = 0
+        self.battle: Battle | None = None
 
         self._give_starter_if_needed()
         self._start_map()
@@ -215,6 +217,16 @@ class Game:
             if self.interact_cooldown > 0:
                 self.interact_cooldown -= 1
 
+            # ── Combat prioritaire ──
+            if self.battle and self.battle.active:
+                self.battle.update()
+                try:
+                    self.screen.update()
+                except pygame.error:
+                    self.running = False
+                    break
+                continue
+
             self._check_virtual_warps()
 
             if (
@@ -309,6 +321,26 @@ class Game:
                 if hasattr(ent, "face_player"):
                     ent.face_player(self.player.direction)
                 if getattr(ent, "use_ai", False) and hasattr(ent, "speak"):
+                    # Centre Pokémon : soigner
+                    if getattr(ent, "personality", "") == "douce_professionnelle":
+                        self._heal_team()
+                        self.dialogue.load_pages([
+                            {"name": ent.name, "text": "Tes Pokémon sont en pleine forme !"},
+                            {"name": ent.name, "text": "Reviens quand tu veux."},
+                        ])
+                        print("[SOIN] Équipe soignée au Centre Pokémon")
+                        return
+                    # Rival : dialogue puis combat
+                    if getattr(ent, "personality", "") == "compétitif":
+                        team = getattr(self.player, "team", None) or []
+                        if team and team[0].hp > 0:
+                            self.dialogue.load_pages([
+                                {"name": ent.name, "text": "Toi ! On se bat, maintenant !"},
+                            ])
+                            # Marquer un combat en attente après le dialogue
+                            self._pending_battle = "rival"
+                            print("[INTERACT] Rival → combat imminent")
+                            return
                     team_names = [
                         getattr(p, "dbSymbol", getattr(p, "name", "?"))
                         for p in getattr(self.player, "team", []) or []
@@ -390,11 +422,99 @@ class Game:
             if self.keylistener.key_pressed(action_key):
                 self.dialogue.action()
                 self.keylistener.remove_key(action_key)
-                # Si dialogue terminé → PNJ reprennent leur vie
                 if not getattr(self.dialogue, "active", False):
                     for ent in getattr(self.map, "npc_entities", []) or []:
                         if hasattr(ent, "resume_after_talk"):
                             ent.resume_after_talk()
+                    # Combat en attente (Rival)
+                    if getattr(self, "_pending_battle", None) == "rival":
+                        self._pending_battle = None
+                        self.start_battle_rival()
+
+
+    def _heal_team(self) -> None:
+        for mon in getattr(self.player, "team", []) or []:
+            mon.hp = mon.maxhp
+            for move in getattr(mon, "moves", []) or []:
+                if hasattr(move, "maxpp") and move.maxpp:
+                    move.pp = move.maxpp
+
+    def start_battle_rival(self) -> None:
+        """Démarre un combat contre le Rival."""
+        team = getattr(self.player, "team", None) or []
+        if not team:
+            print("[BATTLE] Pas de Pokémon — pas de combat")
+            return
+        player_mon = team[0]
+        if player_mon.hp <= 0:
+            player_mon.hp = player_mon.maxhp
+        try:
+            enemy = Pokemon.create_pokemon("charmander", level=max(3, player_mon.level))
+            # Si joueur a charmander, ennemi = bulbasaur / squirtle
+            if (player_mon.dbSymbol or "").lower() == "charmander":
+                enemy = Pokemon.create_pokemon("squirtle", level=max(3, player_mon.level))
+            elif (player_mon.dbSymbol or "").lower() == "squirtle":
+                enemy = Pokemon.create_pokemon("bulbasaur", level=max(3, player_mon.level))
+        except Exception as e:
+            print(f"[BATTLE] Impossible de créer l'ennemi: {e}")
+            return
+
+        def _on_end(result: str) -> None:
+            self.battle = None
+            self.player._dialogue_lock = False
+            self.player.menu_option = False
+            if result == "lose":
+                self._heal_team()
+                self.dialogue.load_pages([
+                    {"name": None, "text": "Tes Pokémon ont été soignés… Reviens plus fort."},
+                ])
+            elif result == "win":
+                self.dialogue.load_pages([
+                    {"name": "Rival", "text": "Tss… Tu as gagné cette fois. On se reverra !"},
+                ])
+            print(f"[BATTLE] Fin — {result}")
+
+        self.player._dialogue_lock = True
+        self.battle = Battle(
+            self.screen,
+            self.controller,
+            self.keylistener,
+            player_mon,
+            enemy,
+            enemy_name="Rival",
+            can_run=True,
+            on_end=_on_end,
+        )
+        print("[BATTLE] Combat vs Rival démarré !")
+
+    def start_wild_battle(self, species: str = "rattata", level: int = 3) -> None:
+        """Combat sauvage (pour tests / herbe plus tard)."""
+        team = getattr(self.player, "team", None) or []
+        if not team:
+            return
+        player_mon = team[0]
+        try:
+            enemy = Pokemon.create_pokemon(species, level=level)
+        except Exception:
+            try:
+                enemy = Pokemon.create_pokemon("pidgey", level=level)
+            except Exception as e:
+                print(f"[BATTLE] Wild fail: {e}")
+                return
+
+        def _on_end(result: str) -> None:
+            self.battle = None
+            self.player._dialogue_lock = False
+            self.player.menu_option = False
+            if result == "lose":
+                self._heal_team()
+
+        self.player._dialogue_lock = True
+        self.battle = Battle(
+            self.screen, self.controller, self.keylistener,
+            player_mon, enemy, enemy_name="Pokémon sauvage",
+            can_run=True, on_end=_on_end,
+        )
 
     def handle_input(self) -> None:
         for event in pygame.event.get():
