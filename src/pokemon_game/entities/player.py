@@ -180,9 +180,14 @@ class Player(Entity):
 
         test = self.hitbox.move(dx, dy)
 
-        # 1) SWITCHES EN PRIORITÉ (même si collision mur)
+        # 1) SWITCHES : ne se déclenchent qu'en ENTRANT dessus (edge-triggered).
+        # Avant : `switch.check_collision(self.hitbox)` vérifiait aussi la position
+        # ACTUELLE, donc si le joueur est déjà sur un switch (ex: point d'apparition
+        # placé exactement dessus), CHAQUE touche déclenchait le switch et faisait
+        # un retour immédiat SANS jamais atteindre `self.position += ...` → plus
+        # aucun mouvement n'était possible, quelle que soit la touche pressée.
         for switch in self.switchs:
-            if switch.check_collision(test) or switch.check_collision(self.hitbox):
+            if switch.check_collision(test) and not switch.check_collision(self.hitbox):
                 self.pending_switch = switch
                 return
 
@@ -190,5 +195,6 @@ class Player(Entity):
         if any(test.colliderect(col) for col in self.collisions):
             return
 
-        # 3) Mouvement OK
+        # 3) Mouvement OK (y compris pour sortir d'une case switch sur laquelle
+        # on se trouve déjà, ce qui était impossible avant ce correctif)
         self.position += pygame.math.Vector2(dx, dy)
