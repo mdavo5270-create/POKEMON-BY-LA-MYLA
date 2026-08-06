@@ -1,4 +1,4 @@
-"""Ursina application entry - 3D overworld prototype."""
+"""Ursina application entry - 3D overworld + battle."""
 from __future__ import annotations
 
 from ursina import (
@@ -10,7 +10,6 @@ from ursina import (
     Text,
     window,
     application,
-    scene,
     mouse,
     Entity,
 )
@@ -29,7 +28,7 @@ def run_app() -> None:
     window.color = color.rgb(30, 40, 55)
     Sky(color=color.rgb(120, 180, 255))
     DirectionalLight(direction=(0.5, -1, -0.3), shadows=True)
-    AmbientLight(color=color.rgba(120, 120, 140, 0.6))
+    AmbientLight(color=color.rgba(130, 130, 150, 0.65))
 
     game = Game3D()
     game.status_text = Text(
@@ -39,7 +38,7 @@ def run_app() -> None:
         background=True,
     )
     game.hint_text = Text(
-        text="WASD/Fleches: bouger | E: combat test | F5: save | Esc: quitter",
+        text="Chargement...",
         position=(-0.85, -0.45),
         scale=0.9,
         background=True,
@@ -47,13 +46,23 @@ def run_app() -> None:
     game.build_map("map_0")
     mouse.locked = False
 
-    def on_key(key):
+    def on_key(key: str) -> None:
+        if game.battle and game.battle.active:
+            game.battle.on_key(key)
+            if key == "escape":
+                game.battle.result = "ran"
+                game.battle.active = False
+                game.end_battle("ran")
+            return
+
         if key == "escape":
             application.quit()
         elif key == "f5":
             game.save_game()
-        elif key in ("e", "espace", "space"):
-            game.try_wild_battle()
+        elif key == "f6":
+            game.heal_team()
+        elif key in ("e", "space"):
+            game.interact()
         elif key == "tab":
             maps = ["map_0", "map_1"]
             try:
@@ -65,6 +74,9 @@ def run_app() -> None:
     class InputSink(Entity):
         def input(self, key):
             on_key(key)
+
+        def update(self):
+            game.update()
 
     InputSink()
     app.run()
