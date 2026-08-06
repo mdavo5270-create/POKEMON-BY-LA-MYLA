@@ -4,7 +4,8 @@ import random
 import math
 import time as pytime
 from enum import Enum, auto
-from ursina import Entity, Text, color, camera, destroy, Vec3, scene
+from ursina import Entity, Text, color, camera, destroy, Vec3, scene, load_texture
+from pokemon_game.core.tool import ASSETS
 from pokemon_game.entities.pokemon import Pokemon
 from pokemon_game.systems.battle import calc_damage
 
@@ -30,16 +31,24 @@ class Battle3D:
         self._build_arena()
 
     def _build_arena(self) -> None:
-        self.entities.append(Entity(model="plane", scale=(14, 1, 14),
-            color=color.rgb(70, 110, 60), position=(0, 0, 0),
-            texture="white_cube", texture_scale=(8, 8)))
-        self.entities.append(Entity(model="circle", scale=6,
-            color=color.rgba(255, 255, 255, 40), position=(0, 0.02, 0), rotation_x=90))
-        self.player_ent = Entity(model="sphere", color=color.rgb(80, 180, 255),
-            scale=1.4, position=(-3.2, 0.9, 1.5))
-        self.enemy_ent = Entity(model="sphere", color=color.rgb(255, 100, 90),
-            scale=1.4, position=(3.2, 0.9, -1.0))
+        grass = ASSETS / "render3d" / "grass.png"
+        gtex = load_texture(str(grass)) if grass.exists() else "white_cube"
+        self.entities.append(Entity(model="plane", scale=(16, 1, 16),
+            color=color.white if grass.exists() else color.rgb(70, 110, 60),
+            position=(0, 0, 0), texture=gtex, texture_scale=(10, 10)))
+        self.entities.append(Entity(model="circle", scale=7,
+            color=color.rgba(255, 255, 200, 50), position=(0, 0.03, 0), rotation_x=90))
+        icon = ASSETS / "render3d" / "poke_icon.png"
+        itex = load_texture(str(icon)) if icon.exists() else None
+        self.player_ent = Entity(model="quad", texture=itex, color=color.rgb(120, 200, 255),
+            scale=(1.8, 1.8), position=(-3.5, 1.2, 1.5), double_sided=True)
+        self.enemy_ent = Entity(model="quad", texture=itex, color=color.rgb(255, 140, 120),
+            scale=(1.8, 1.8), position=(3.5, 1.2, -1.0), double_sided=True)
         self.entities.extend([self.player_ent, self.enemy_ent])
+        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,80),
+            scale=1.2, position=(-3.5, 0.05, 1.5), rotation_x=90))
+        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,80),
+            scale=1.2, position=(3.5, 0.05, -1.0), rotation_x=90))
         self.title = Text(text="COMBAT", position=(-0.1, 0.45), scale=1.4, background=True)
         self.log = Text(text=self.messages[0], position=(-0.8, -0.28), scale=1.0, background=True)
         self.menu_txt = Text(text="", position=(-0.8, -0.38), scale=0.95, background=True)
@@ -64,8 +73,10 @@ class Battle3D:
         if self.cooldown > 0: self.cooldown -= dt
         self.hp_txt.text = self._hp_line()
         t = pytime.time()
-        self.player_ent.y = 0.9 + 0.05 * math.sin(t * 3)
-        self.enemy_ent.y = 0.9 + 0.05 * math.sin(t * 3 + 1)
+        self.player_ent.y = 1.2 + 0.05 * math.sin(t * 3)
+        self.enemy_ent.y = 1.2 + 0.05 * math.sin(t * 3 + 1)
+        self.player_ent.look_at(camera.world_position); self.player_ent.rotation_z = 0; self.player_ent.rotation_x = 0
+        self.enemy_ent.look_at(camera.world_position); self.enemy_ent.rotation_z = 0; self.enemy_ent.rotation_x = 0
 
     def on_key(self, key: str) -> None:
         if not self.active or self.cooldown > 0: return
