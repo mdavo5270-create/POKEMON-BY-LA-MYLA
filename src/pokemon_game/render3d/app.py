@@ -12,12 +12,15 @@ from ursina import (
     application,
     mouse,
     Entity,
+    scene,
 )
 
 from pokemon_game.render3d.game3d import Game3D
+from pokemon_game.render3d.textures import ensure_textures
 
 
 def run_app() -> None:
+    ensure_textures()
     app = Ursina(
         title="POKEMON BY LA MYLA - 3D",
         borderless=False,
@@ -25,10 +28,15 @@ def run_app() -> None:
         development_mode=False,
         vsync=True,
     )
-    window.color = color.rgb(30, 40, 55)
-    Sky(color=color.rgb(120, 180, 255))
-    DirectionalLight(direction=(0.5, -1, -0.3), shadows=True)
-    AmbientLight(color=color.rgba(130, 130, 150, 0.65))
+    window.color = color.rgb(135, 190, 230)
+    Sky()
+    DirectionalLight(direction=(0.4, -1, -0.35), shadows=True, color=color.rgb(255, 245, 230))
+    AmbientLight(color=color.rgba(160, 170, 190, 0.75))
+    try:
+        scene.fog_color = color.rgb(180, 210, 230)
+        scene.fog_density = 0.012
+    except Exception:
+        pass
 
     game = Game3D()
     game.status_text = Text(

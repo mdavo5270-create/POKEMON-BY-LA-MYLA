@@ -1,7 +1,7 @@
 """Build 3D map visuals from WorldGrid."""
 from __future__ import annotations
 
-from ursina import Entity, color, destroy
+from ursina import Entity, color, destroy, load_texture
 
 from pokemon_game.core.tool import ASSETS
 from pokemon_game.render3d.player3d import Player3D
@@ -43,13 +43,18 @@ def build_world_entities(game, map_name: str, port: int = 0):
     w, h = game.world.width, game.world.height
     ts = game.world.tile_size
     is_outdoor = map_name.startswith("map")
-    ground_col = color.rgb(55, 130, 65) if is_outdoor else color.rgb(120, 100, 80)
+    tex_name = "grass.png" if is_outdoor else "floor_interior.png"
+    tex_path = ASSETS / "render3d" / tex_name
+    ground_tex = load_texture(str(tex_path)) if tex_path.exists() else "white_cube"
+    ground_col = color.white if tex_path.exists() else (
+        color.rgb(55, 130, 65) if is_outdoor else color.rgb(120, 100, 80)
+    )
     ground = Entity(
         model="plane",
         scale=(w * ts, 1, h * ts),
         color=ground_col,
-        texture="white_cube",
-        texture_scale=(w, h),
+        texture=ground_tex,
+        texture_scale=(max(w // 2, 1), max(h // 2, 1)),
         collider="box",
         position=(w * ts / 2, 0, h * ts / 2),
     )
@@ -59,13 +64,22 @@ def build_world_entities(game, map_name: str, port: int = 0):
     step = 1 if len(blocked) < 1200 else 2
     for gx, gy in blocked[::step]:
         wx, wz = game.world.grid_to_world(gx, gy)
-        wall = Entity(
-            model="cube",
-            color=color.rgb(85, 85, 90) if is_outdoor else color.rgb(100, 90, 80),
-            scale=(0.95 * step, 1.1, 0.95 * step),
-            position=(wx, 0.55, wz),
-            collider="box",
-        )
+        if is_outdoor:
+            wall = Entity(
+                model="cube",
+                color=color.rgb(40, 100, 45),
+                scale=(0.95 * step, 0.55, 0.95 * step),
+                position=(wx, 0.28, wz),
+                collider="box",
+            )
+        else:
+            wall = Entity(
+                model="cube",
+                color=color.rgb(140, 120, 100),
+                scale=(0.95 * step, 1.4, 0.95 * step),
+                position=(wx, 0.7, wz),
+                collider="box",
+            )
         game.tiles.append(wall)
 
     for winfo in game.world.warps:
