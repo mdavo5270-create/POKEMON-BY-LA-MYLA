@@ -9,6 +9,15 @@ from pokemon_game.core.tool import ASSETS
 from pokemon_game.entities.pokemon import Pokemon
 from pokemon_game.systems.battle import calc_damage
 
+TYPE_COLORS = {
+    "normal": (200, 200, 200), "fire": (240, 80, 40), "water": (60, 120, 240),
+    "grass": (80, 180, 70), "electric": (250, 220, 50), "ice": (150, 220, 240),
+    "fighting": (180, 60, 40), "poison": (160, 80, 180), "ground": (200, 170, 80),
+    "flying": (150, 170, 240), "psychic": (240, 100, 160), "bug": (160, 200, 40),
+    "rock": (180, 160, 80), "ghost": (100, 80, 160), "dragon": (100, 60, 220),
+    "dark": (100, 80, 70), "steel": (180, 180, 200), "fairy": (240, 150, 200),
+}
+
 class BattlePhase(Enum):
     INTRO = auto(); MENU = auto(); MOVES = auto()
     RESOLVE = auto(); ENEMY = auto(); END = auto()
@@ -40,20 +49,28 @@ class Battle3D:
             color=color.rgba(255, 255, 200, 50), position=(0, 0.03, 0), rotation_x=90))
         icon = ASSETS / "render3d" / "poke_icon.png"
         itex = load_texture(str(icon)) if icon.exists() else None
-        self.player_ent = Entity(model="quad", texture=itex, color=color.rgb(120, 200, 255),
-            scale=(1.8, 1.8), position=(-3.5, 1.2, 1.5), double_sided=True)
-        self.enemy_ent = Entity(model="quad", texture=itex, color=color.rgb(255, 140, 120),
-            scale=(1.8, 1.8), position=(3.5, 1.2, -1.0), double_sided=True)
+        def _type_col(mon):
+            t = mon.type[0] if getattr(mon, "type", None) else "normal"
+            rgb = TYPE_COLORS.get(str(t).lower(), (180, 180, 180))
+            return color.rgb(*rgb)
+        self.player_ent = Entity(model="quad", texture=itex, color=_type_col(self.player_mon),
+            scale=(2.0, 2.0), position=(-3.5, 1.3, 1.5), double_sided=True)
+        self.enemy_ent = Entity(model="quad", texture=itex, color=_type_col(self.enemy),
+            scale=(2.0, 2.0), position=(3.5, 1.3, -1.0), double_sided=True)
         self.entities.extend([self.player_ent, self.enemy_ent])
-        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,80),
-            scale=1.2, position=(-3.5, 0.05, 1.5), rotation_x=90))
-        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,80),
-            scale=1.2, position=(3.5, 0.05, -1.0), rotation_x=90))
+        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,90),
+            scale=1.3, position=(-3.5, 0.05, 1.5), rotation_x=90))
+        self.entities.append(Entity(model="circle", color=color.rgba(0,0,0,90),
+            scale=1.3, position=(3.5, 0.05, -1.0), rotation_x=90))
         self.title = Text(text="COMBAT", position=(-0.1, 0.45), scale=1.4, background=True)
+        self.name_p = Text(text=self.player_mon.dbSymbol.upper(), position=(-0.55, 0.22),
+            scale=1.1, background=True, origin=(0,0))
+        self.name_e = Text(text=self.enemy.dbSymbol.upper(), position=(0.35, 0.22),
+            scale=1.1, background=True, origin=(0,0))
         self.log = Text(text=self.messages[0], position=(-0.8, -0.28), scale=1.0, background=True)
         self.menu_txt = Text(text="", position=(-0.8, -0.38), scale=0.95, background=True)
         self.hp_txt = Text(text=self._hp_line(), position=(-0.8, 0.38), scale=0.95, background=True)
-        self.hud.extend([self.title, self.log, self.menu_txt, self.hp_txt])
+        self.hud.extend([self.title, self.name_p, self.name_e, self.log, self.menu_txt, self.hp_txt])
         camera.parent = scene
         camera.position = (0, 6, -11)
         camera.rotation_x = 28
@@ -73,8 +90,8 @@ class Battle3D:
         if self.cooldown > 0: self.cooldown -= dt
         self.hp_txt.text = self._hp_line()
         t = pytime.time()
-        self.player_ent.y = 1.2 + 0.05 * math.sin(t * 3)
-        self.enemy_ent.y = 1.2 + 0.05 * math.sin(t * 3 + 1)
+        self.player_ent.y = 1.3 + 0.05 * math.sin(t * 3)
+        self.enemy_ent.y = 1.3 + 0.05 * math.sin(t * 3 + 1)
         self.player_ent.look_at(camera.world_position); self.player_ent.rotation_z = 0; self.player_ent.rotation_x = 0
         self.enemy_ent.look_at(camera.world_position); self.enemy_ent.rotation_z = 0; self.enemy_ent.rotation_x = 0
 
