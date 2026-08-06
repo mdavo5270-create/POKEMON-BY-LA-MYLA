@@ -8,9 +8,15 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Random import get_random_bytes
+# Optional encryption (pycryptodome). Game works without it when encrypt=False.
+try:
+    from Crypto.Cipher import AES
+    from Crypto.Protocol.KDF import PBKDF2
+    from Crypto.Random import get_random_bytes
+    _HAS_CRYPTO = True
+except ImportError:  # pragma: no cover
+    AES = PBKDF2 = get_random_bytes = None  # type: ignore
+    _HAS_CRYPTO = False
 
 
 # Save format versioning
@@ -20,7 +26,7 @@ BACKUP_COUNT = 3
 
 
 def get_saves_dir() -> Path:
-    """Return the recommended saves directory (Windows: %APPDATA%\PokemonByLaMyla\saves).
+    r"""Return the recommended saves directory (Windows: %APPDATA%\PokemonByLaMyla\saves).
 
     Falls back to a local ./saves folder when APPDATA is unavailable.
     """
@@ -68,6 +74,8 @@ def write_json_atomic(path: Path, data: Dict[str, Any], encrypt: bool = False, p
     raw = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
 
     if encrypt and password:
+        if not _HAS_CRYPTO:
+            raise RuntimeError("Encryption requested but pycryptodome is not installed.")
         raw = _encrypt_bytes(raw, password)
 
     fd, tmp = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
@@ -88,6 +96,8 @@ def read_json(path: Path, decrypt: bool = False, password: Optional[str] = None)
     try:
         raw = path.read_bytes()
         if decrypt and password:
+            if not _HAS_CRYPTO:
+                raise RuntimeError("Decryption requested but pycryptodome is not installed.")
             raw = _decrypt_bytes(raw, password)
         return json.loads(raw.decode("utf-8"))
     except Exception:
@@ -103,10 +113,14 @@ _NONCE_LEN = 12
 
 
 def _derive_key(password: str, salt: bytes) -> bytes:
+    if not _HAS_CRYPTO:
+        raise RuntimeError("pycryptodome required for encryption")
     return PBKDF2(password, salt, dkLen=_KEY_LEN, count=_ITER)
 
 
 def _encrypt_bytes(plain: bytes, password: str) -> bytes:
+    if not _HAS_CRYPTO:
+        raise RuntimeError("pycryptodome required for encryption")
     salt = get_random_bytes(_SALT_SIZE)
     key = _derive_key(password, salt)
     cipher = AES.new(key, AES.MODE_GCM)
@@ -116,6 +130,8 @@ def _encrypt_bytes(plain: bytes, password: str) -> bytes:
 
 
 def _decrypt_bytes(payload: bytes, password: str) -> bytes:
+    if not _HAS_CRYPTO:
+        raise RuntimeError("pycryptodome required for decryption")
     salt = payload[:_SALT_SIZE]
     nonce = payload[_SALT_SIZE : _SALT_SIZE + _NONCE_LEN]
     tag = payload[_SALT_SIZE + _NONCE_LEN : _SALT_SIZE + _NONCE_LEN + 16]
