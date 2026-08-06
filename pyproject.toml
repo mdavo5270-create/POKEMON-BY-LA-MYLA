@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pokemon-by-la-myla"
 version = "1.0.0"
-description = "POKEMON BY LA MYLA - Clean final Pokémon fan-game in Python/Pygame"
+description = "POKEMON BY LA MYLA - Pokémon fan-game (2D Pygame + prototype 3D Ursina)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov", "ruff", "mypy", "black"]
 encrypt = ["pycryptodome>=3.19"]
+3d = ["ursina>=7.0", "panda3d>=1.10"]
 [project.scripts]
 pokemon-game = "pokemon_game.main:main"
 [tool.setuptools.packages.find]

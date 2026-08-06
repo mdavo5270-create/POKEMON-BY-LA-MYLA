@@ -12,6 +12,7 @@ src/pokemon_game/
 ├── core/       # Game, Screen, Map, Controller, KeyListener, Switch, Tool
 ├── entities/   # Entity, Player, Pokemon, Move
 ├── systems/    # Dialogue, Save, Option, SQL
+├── render3d/   # Prototype 3D Ursina
 └── ui/         # (futur)
 assets/         # maps, sprites, json, fonts, interfaces
 tests/
@@ -61,3 +62,42 @@ Basé sur le travail original d’Arnaud Michel.
 Version propre et finale par **La Myla**.
 
 MIT License
+
+## Mode 3D (prototype Ursina)
+
+Le jeu 2D Pygame reste le mode par défaut. Un **prototype 3D** réutilise les mêmes données Pokémon, inventaire et sauvegarde.
+
+### Installation 3D
+
+```bash
+pip install -e ".[3d]"
+```
+
+### Lancer
+
+```bash
+python -m pokemon_game --3d
+# ou
+POKEMON_RENDER=3d python -m pokemon_game
+```
+
+### Contrôles 3D
+
+| Touche | Action |
+|--------|--------|
+| WASD / flèches | Déplacement |
+| E / Espace | Combat sauvage test (calculs Battle existants) |
+| F5 | Sauvegarde (`save_3d`) |
+| Tab | Changer de carte (map_0 / map_1) |
+| Esc | Quitter |
+
+### Architecture
+
+```
+src/pokemon_game/render3d/
+├── app.py       # Boucle Ursina + HUD
+├── player3d.py  # Contrôleur 3e personne
+└── world.py     # Grille 3D depuis TMX (collisions / warps)
+```
+
+Les systèmes `entities/pokemon`, `systems/battle`, `systems/inventory`, `systems/save_io` sont **partagés** avec le mode 2D.
