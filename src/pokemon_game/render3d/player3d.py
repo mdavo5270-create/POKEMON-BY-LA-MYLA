@@ -1,59 +1,72 @@
-"""Third-person player controller for the 3D overworld."""
+"""Third-person player — 2D sprite billboard (same art as the 2D game)."""
 from __future__ import annotations
 
-from ursina import Entity, Vec3, held_keys, time, color, camera
+from ursina import Entity, Vec3, held_keys, time, color, camera, load_texture
 
-
+from pokemon_game.core.tool import ASSETS
 from pokemon_game.render3d.world import WorldGrid
 
 
+def _tex(name: str):
+    path = ASSETS / "render3d" / name
+    if path.exists():
+        return load_texture(str(path))
+    return None
+
+
 class Player3D(Entity):
-    """Capsule-like trainer (body + head) with camera rig."""
+    """Trainer as upright billboard using hero walk sprites from 2D assets."""
 
     def __init__(self, world: WorldGrid, **kwargs):
-        super().__init__(
-            model=None,
-            collider="box",
-            scale=(0.7, 1.0, 0.7),
-            **kwargs,
-        )
+        super().__init__(model=None, collider="box", scale=(1, 1, 1), **kwargs)
         self.world = world
         self.speed = 5.0
         self.y = 0.0
-        self.locked = False  # True during battle / dialogue
+        self.locked = False
+        self._facing = "down"
+        self._bob = 0.0
 
-        # Visual hierarchy (procedural "model")
-        self.body = Entity(
+        self.sprite = Entity(
             parent=self,
-            model="cube",
-            color=color.rgb(40, 120, 220),
-            scale=(0.55, 0.85, 0.4),
-            position=(0, 0.55, 0),
+            model="quad",
+            texture=_tex("hero_down.png"),
+            scale=(0.9, 1.15),
+            position=(0, 0.7, 0),
+            double_sided=True,
+            color=color.white,
         )
-        self.head = Entity(
+        self.shadow = Entity(
             parent=self,
-            model="sphere",
-            color=color.rgb(255, 210, 180),
-            scale=(0.35, 0.35, 0.35),
-            position=(0, 1.15, 0),
-        )
-        self.hat = Entity(
-            parent=self.head,
-            model="cube",
-            color=color.rgb(200, 40, 40),
-            scale=(1.2, 0.25, 1.2),
-            position=(0, 0.35, 0),
+            model="circle",
+            color=color.rgba(0, 0, 0, 90),
+            scale=0.7,
+            position=(0, 0.02, 0),
+            rotation_x=90,
         )
 
-        self.camera_pivot = Entity(parent=self, y=1.5)
+        self.camera_pivot = Entity(parent=self, y=1.4)
         camera.parent = self.camera_pivot
-        camera.position = (0, 2.5, -7)
-        camera.rotation_x = 20
-        camera.fov = 70
+        camera.position = (0, 3.0, -8)
+        camera.rotation_x = 22
+        camera.fov = 65
+
+    def _set_facing(self, direction: Vec3) -> None:
+        if abs(direction.x) > abs(direction.z):
+            self._facing = "right" if direction.x > 0 else "left"
+        else:
+            self._facing = "down" if direction.z > 0 else "up"
+        tex = _tex(f"hero_{self._facing}.png")
+        if tex is not None:
+            self.sprite.texture = tex
 
     def update(self):
         if self.locked or not self.world:
             return
+        if self.sprite:
+            self.sprite.look_at(camera.world_position)
+            self.sprite.rotation_x = 0
+            self.sprite.rotation_z = 0
+
         move = Vec3(
             held_keys["d"] - held_keys["a"] + held_keys["right arrow"] - held_keys["left arrow"],
             0,
@@ -78,4 +91,6 @@ class Player3D(Entity):
         if not self.world.is_blocked(gx, gy):
             self.x = nx
             self.z = nz
-        self.look_at(Vec3(self.x + direction.x, self.y, self.z + direction.z))
+        self._set_facing(direction)
+        self._bob += time.dt * 10
+        self.sprite.y = 0.7 + 0.03 * __import__("math").sin(self._bob)
