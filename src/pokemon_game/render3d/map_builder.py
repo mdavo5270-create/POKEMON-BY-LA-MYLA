@@ -1,10 +1,11 @@
-"""Build 3D map visuals from WorldGrid."""
+"""Build 3D map visuals from WorldGrid + baked TMX texture."""
 from __future__ import annotations
 
 from ursina import Entity, color, destroy, load_texture
 
 from pokemon_game.core.tool import ASSETS
 from pokemon_game.render3d.player3d import Player3D
+from pokemon_game.render3d.textures import bake_map_texture
 from pokemon_game.render3d.world import load_world_from_tmx
 
 BUILDING_COLORS = {
@@ -43,44 +44,49 @@ def build_world_entities(game, map_name: str, port: int = 0):
     w, h = game.world.width, game.world.height
     ts = game.world.tile_size
     is_outdoor = map_name.startswith("map")
-    tex_name = "grass.png" if is_outdoor else "floor_interior.png"
-    tex_path = ASSETS / "render3d" / tex_name
-    ground_tex = load_texture(str(tex_path)) if tex_path.exists() else "white_cube"
-    ground_col = color.white if tex_path.exists() else (
-        color.rgb(55, 130, 65) if is_outdoor else color.rgb(120, 100, 80)
-    )
-    ground = Entity(
-        model="plane",
-        scale=(w * ts, 1, h * ts),
-        color=ground_col,
-        texture=ground_tex,
-        texture_scale=(max(w // 2, 1), max(h // 2, 1)),
-        collider="box",
-        position=(w * ts / 2, 0, h * ts / 2),
-    )
-    game.tiles.append(ground)
+    world_w, world_h = w * ts, h * ts
 
-    blocked = list(game.world.blocked)
-    step = 1 if len(blocked) < 1200 else 2
-    for gx, gy in blocked[::step]:
-        wx, wz = game.world.grid_to_world(gx, gy)
-        if is_outdoor:
+    baked = bake_map_texture(map_name)
+    if baked and baked.exists():
+        ground = Entity(
+            model="plane",
+            scale=(world_w, 1, world_h),
+            color=color.white,
+            texture=load_texture(str(baked)),
+            texture_scale=(1, 1),
+            collider="box",
+            position=(world_w / 2, 0, world_h / 2),
+        )
+        game.tiles.append(ground)
+        print(f"[3D] Sol = texture baked {baked.name}")
+    else:
+        tex_name = "grass.png" if is_outdoor else "floor_interior.png"
+        tex_path = ASSETS / "render3d" / tex_name
+        ground_tex = load_texture(str(tex_path)) if tex_path.exists() else "white_cube"
+        ground = Entity(
+            model="plane",
+            scale=(world_w, 1, world_h),
+            color=color.white if tex_path.exists() else color.rgb(55, 130, 65),
+            texture=ground_tex,
+            texture_scale=(max(w // 2, 1), max(h // 2, 1)),
+            collider="box",
+            position=(world_w / 2, 0, world_h / 2),
+        )
+        game.tiles.append(ground)
+
+    if not baked:
+        blocked = list(game.world.blocked)
+        step = 1 if len(blocked) < 1200 else 2
+        for gx, gy in blocked[::step]:
+            wx, wz = game.world.grid_to_world(gx, gy)
             wall = Entity(
                 model="cube",
-                color=color.rgb(40, 100, 45),
-                scale=(0.95 * step, 0.55, 0.95 * step),
-                position=(wx, 0.28, wz),
+                color=color.rgb(40, 100, 45) if is_outdoor else color.rgb(140, 120, 100),
+                scale=(0.95 * step, 0.55 if is_outdoor else 1.4, 0.95 * step),
+                position=(wx, 0.28 if is_outdoor else 0.7, wz),
                 collider="box",
             )
-        else:
-            wall = Entity(
-                model="cube",
-                color=color.rgb(140, 120, 100),
-                scale=(0.95 * step, 1.4, 0.95 * step),
-                position=(wx, 0.7, wz),
-                collider="box",
-            )
-        game.tiles.append(wall)
+            game.tiles.append(wall)
 
     for winfo in game.world.warps:
         gx, gy = winfo["gx"], winfo["gy"]
@@ -88,23 +94,27 @@ def build_world_entities(game, map_name: str, port: int = 0):
         wx, wz = game.world.grid_to_world(gx, gy)
         pad = Entity(
             model="cube",
-            color=color.rgb(255, 220, 40),
-            scale=(0.95, 0.1, 0.95),
-            position=(wx, 0.06, wz),
+            color=color.rgb(255, 230, 60),
+            scale=(0.85, 0.08, 0.85),
+            position=(wx, 0.05, wz),
         )
-        game.tiles.append(pad)
+        beam = Entity(
+            model="cube",
+            color=color.rgba(255, 240, 100, 60),
+            scale=(0.4, 1.2, 0.4),
+            position=(wx, 0.7, wz),
+        )
+        game.tiles.extend([pad, beam])
         game._warp_pads.append((pad, target, port_w))
         if is_outdoor and not target.startswith("map"):
             col = BUILDING_COLORS.get(target, color.rgb(160, 140, 120))
-            building = Entity(
-                model="cube", color=col, scale=(2.2, 2.0, 2.2),
-                position=(wx, 1.0, wz - 1.5),
+            flag = Entity(
+                model="cube",
+                color=col,
+                scale=(0.35, 2.5, 0.35),
+                position=(wx, 1.4, wz - 1.2),
             )
-            roof = Entity(
-                model="cube", color=color.rgb(140, 50, 50), scale=(2.5, 0.35, 2.5),
-                position=(wx, 2.15, wz - 1.5),
-            )
-            game.tiles.extend([building, roof])
+            game.tiles.append(flag)
 
     spawn_pos = None
     for key, pos in game.world.spawns.items():
